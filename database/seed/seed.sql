@@ -6,7 +6,7 @@ INSERT INTO caterers (id, name, contact_email, contact_phone, home_postcode, max
 (1, 'Lakehouse Victoria Point', 'lakehousevictoriapoint.caterer@example.com', NULL, '4165', 50, 0, false, 10.00, '2026-06-03 04:56:04.774576+00:00'::timestamptz, '2026-06-05 03:07:53.878763+00:00'::timestamptz),
 (2, 'Terrific Noodles', 'terrificnoodles.caterer@example.com', NULL, '4101', 50, 3000, false, 10.00, '2026-06-03 04:56:04.774576+00:00'::timestamptz, '2026-06-05 03:07:53.878763+00:00'::timestamptz),
 (3, 'Kenko Sushi House', 'kenkosushihouse.caterer@example.com', NULL, '4068', 50, 1000, true, 10.00, '2026-06-03 04:56:04.774576+00:00'::timestamptz, '2026-06-05 03:07:53.878763+00:00'::timestamptz),
-(4, 'Guzman y Gomez', 'guzmanygomez.caterer@example.com', NULL, '4000', 50, 0, true, 10.00, '2026-06-03 04:56:04.774576+00:00'::timestamptz, '2026-06-05 03:07:53.878763+00:00'::timestamptz);
+(4, 'Guzman y Gomez', 'guzmanygomez.caterer@example.com', NULL, '4000', 50, 5000, true, 10.00, '2026-06-03 04:56:04.774576+00:00'::timestamptz, '2026-06-05 03:44:26.563310+00:00'::timestamptz);
 
 -- schools: 6 row(s)
 INSERT INTO schools (id, name, building, postcode, current_caterer_id, created_at, updated_at) VALUES
@@ -17,44 +17,20 @@ INSERT INTO schools (id, name, building, postcode, current_caterer_id, created_a
 (5, 'Loreto College', 'Ella Building', '4151', 4, '2026-06-03 04:56:04.774576+00:00'::timestamptz, '2026-06-03 04:56:04.774576+00:00'::timestamptz),
 (6, 'Cannon Hill Anglican College', 'E Centre', '4170', 4, '2026-06-03 04:56:04.774576+00:00'::timestamptz, '2026-06-03 04:56:04.774576+00:00'::timestamptz);
 
--- caterer_moq_tier: 36 row(s)
+-- caterer_moq_tier: 12 row(s)
 INSERT INTO caterer_moq_tier (caterer_id, variety_count, min_total_items) VALUES
 (1, 4, 15),
 (1, 5, 20),
 (1, 6, 25),
-(1, 7, 30),
-(1, 8, 35),
-(1, 9, 40),
-(1, 10, 45),
-(1, 11, 50),
-(1, 12, 55),
 (2, 4, 10),
 (2, 5, 20),
 (2, 6, 30),
-(2, 7, 40),
-(2, 8, 50),
-(2, 9, 60),
-(2, 10, 70),
-(2, 11, 80),
-(2, 12, 90),
 (3, 4, 35),
 (3, 5, 40),
 (3, 6, 45),
-(3, 7, 50),
-(3, 8, 55),
-(3, 9, 60),
-(3, 10, 65),
-(3, 11, 70),
-(3, 12, 75),
 (4, 4, 20),
 (4, 5, 25),
-(4, 6, 30),
-(4, 7, 35),
-(4, 8, 40),
-(4, 9, 45),
-(4, 10, 50),
-(4, 11, 55),
-(4, 12, 60);
+(4, 6, 30);
 
 -- menu_items: 40 row(s)
 INSERT INTO menu_items (id, caterer_id, name, description, contents_text, tweaks_text, price_cents, active, created_at, updated_at) VALUES
@@ -347,7 +323,7 @@ INSERT INTO enrolments (id, school_id, student_name, student_year_level, parent_
 (10, 1, 'Bailey Collins', 11, 'Noah Collins', 'bailey.collins.parent@example.com', '0458971565', '2026-04-21'::date, '2026-04-21'::date, NULL, false, 'No requirements', '2026-06-03 04:56:04.774576+00:00'::timestamptz, '2026-06-05 03:07:53.878763+00:00'::timestamptz),
 (11, 1, 'Daniel Carter', 12, 'Alexander Carter', 'daniel.carter.parent@example.com', '0458971565', '2026-04-21'::date, '2026-04-21'::date, NULL, false, 'No requirements', '2026-06-03 04:56:04.774576+00:00'::timestamptz, '2026-06-05 03:07:53.878763+00:00'::timestamptz),
 (12, 1, 'Benjamin Johnson', 12, 'Aria Johnson', 'benjamin.johnson.parent@example.com', '0458971565', '2026-04-21'::date, '2026-04-21'::date, NULL, false, 'Nut Free', '2026-06-03 04:56:04.774576+00:00'::timestamptz, '2026-06-05 03:07:53.878763+00:00'::timestamptz),
-(13, 1, 'Jack Wilson', 12, 'Sienna Wilson', 'jack.wilson.parent@example.com', '0458971565', '2026-04-21'::date, '2026-04-21'::date, NULL, false, 'Gluten Free', '2026-06-03 04:56:04.774576+00:00'::timestamptz, '2026-06-05 03:07:53.878763+00:00'::timestamptz),
+(13, 1, 'Jack Wilson', 12, 'Sienna Wilson', 'jack.wilson.parent@example.com', '0458971565', '2026-04-21'::date, '2026-04-21'::date, NULL, false, 'No requirements', '2026-06-03 04:56:04.774576+00:00'::timestamptz, '2026-06-05 03:44:26.563310+00:00'::timestamptz),
 (14, 1, 'Connor Mitchell', 12, 'Ava Mitchell', 'connor.mitchell.parent@example.com', '0458971565', '2026-04-21'::date, '2026-04-21'::date, NULL, false, 'No requirements', '2026-06-03 04:56:04.774576+00:00'::timestamptz, '2026-06-05 03:07:53.878763+00:00'::timestamptz),
 (15, 1, 'Charlie Murphy', 12, 'Harper Murphy', 'charlie.murphy.parent@example.com', '0458971565', '2026-04-21'::date, '2026-04-21'::date, NULL, false, 'No Shellfish', '2026-06-03 04:56:04.774576+00:00'::timestamptz, '2026-06-05 03:07:53.878763+00:00'::timestamptz),
 (16, 1, 'Penelope Carter', 12, 'Eliza Carter', 'penelope.carter.parent@example.com', '0458971565', '2026-04-21'::date, '2026-04-21'::date, NULL, false, 'No requirements', '2026-06-03 04:56:04.774576+00:00'::timestamptz, '2026-06-05 03:07:53.878763+00:00'::timestamptz),
@@ -1130,13 +1106,11 @@ INSERT INTO enrolment_session_slots (enrolment_id, session_slot_id) VALUES
 (320, 10),
 (320, 11);
 
--- exclusions: 5 row(s)
+-- exclusions: 3 row(s)
 INSERT INTO exclusions (id, school_id, enrolment_id, start_date, end_date, reason, created_at) VALUES
 (1, 4, NULL, '2026-05-04'::date, '2026-05-04'::date, 'Open Day - whole session cancelled, all year levels', '2026-06-03 04:56:04.774576+00:00'::timestamptz),
 (2, 5, NULL, '2026-05-02'::date, '2026-05-02'::date, 'Parent-Teacher Interviews - whole session cancelled, all year levels', '2026-06-03 04:56:04.774576+00:00'::timestamptz),
-(3, 6, NULL, '2026-05-03'::date, '2026-05-03'::date, 'School Camp - Years 10 and 12 away (Year 11 attends)', '2026-06-03 04:56:04.774576+00:00'::timestamptz),
-(4, 4, NULL, '2026-05-19'::date, '2026-05-19'::date, 'No Tuesday session this week - whole session cancelled', '2026-06-03 04:56:04.774576+00:00'::timestamptz),
-(5, 4, NULL, '2026-05-26'::date, '2026-05-26'::date, 'No Tuesday session this week - whole session cancelled', '2026-06-03 04:56:04.774576+00:00'::timestamptz);
+(3, 6, NULL, '2026-05-03'::date, '2026-05-03'::date, 'School Camp - Years 10 and 12 away (Year 11 attends)', '2026-06-03 04:56:04.774576+00:00'::timestamptz);
 
 -- absences: 10 row(s)
 INSERT INTO absences (id, enrolment_id, absence_date, received_at, source_email_filename, source_email_message_id, notes) VALUES
@@ -3028,6 +3002,399 @@ INSERT INTO term_meal_preference_items (preference_id, menu_item_id, rank) VALUE
 (313, 39, 3);
 
 -- meal_requests: 0 row(s)
+
+-- orders: 11 row(s)
+INSERT INTO orders (id, session_slot_id, caterer_id, session_date, total_items, total_cost_cents, gst_rate_percent, composed_at, sent_at) VALUES
+(1, 1, 1, '2026-06-09'::date, 17, 65450, 10.00, '2026-06-05 04:30:21.907218+00:00'::timestamptz, NULL),
+(2, 2, 2, '2026-06-09'::date, 38, 88990, 10.00, '2026-06-05 04:30:32.973562+00:00'::timestamptz, NULL),
+(3, 3, 2, '2026-06-10'::date, 38, 88990, 10.00, '2026-06-05 04:30:32.973562+00:00'::timestamptz, NULL),
+(4, 4, 2, '2026-06-11'::date, 8, 21340, 10.00, '2026-06-05 04:30:32.973562+00:00'::timestamptz, NULL),
+(5, 5, 3, '2026-06-08'::date, 47, 26850, 10.00, '2026-06-05 04:30:44.126683+00:00'::timestamptz, NULL),
+(6, 6, 3, '2026-06-09'::date, 48, 27400, 10.00, '2026-06-05 04:30:44.126683+00:00'::timestamptz, NULL),
+(7, 7, 3, '2026-06-11'::date, 46, 26300, 10.00, '2026-06-05 04:30:44.126683+00:00'::timestamptz, NULL),
+(8, 8, 4, '2026-06-08'::date, 33, 54500, 10.00, '2026-06-05 04:30:55.341601+00:00'::timestamptz, NULL),
+(9, 9, 4, '2026-06-09'::date, 33, 54500, 10.00, '2026-06-05 04:30:55.341601+00:00'::timestamptz, NULL),
+(10, 10, 4, '2026-06-08'::date, 33, 54500, 10.00, '2026-06-05 04:30:55.341601+00:00'::timestamptz, NULL),
+(11, 11, 4, '2026-06-10'::date, 32, 53000, 10.00, '2026-06-05 04:30:55.341601+00:00'::timestamptz, NULL);
+
+-- order_lines: 373 row(s)
+INSERT INTO order_lines (id, order_id, enrolment_id, menu_item_id, source) VALUES
+(1, 1, 5, 10, 'rotation'),
+(2, 1, 10, 10, 'rotation'),
+(3, 1, 12, 9, 'rotation'),
+(4, 1, 2, 2, 'rotation'),
+(5, 1, 15, 9, 'rotation'),
+(6, 1, 14, 2, 'rotation'),
+(7, 1, 11, 5, 'rotation'),
+(8, 1, 6, 5, 'rotation'),
+(9, 1, 8, 10, 'rotation'),
+(10, 1, 1, 10, 'rotation'),
+(11, 1, 17, 5, 'rotation'),
+(12, 1, 13, 9, 'rotation'),
+(13, 1, 3, 2, 'rotation'),
+(14, 1, 9, 2, 'rotation'),
+(15, 1, 16, 9, 'rotation'),
+(16, 1, 7, 2, 'rotation'),
+(17, 1, 4, 2, 'rotation'),
+(18, 2, 58, 11, 'rotation'),
+(19, 2, 44, 15, 'rotation'),
+(20, 2, 52, 11, 'rotation'),
+(21, 2, 70, 17, 'rotation'),
+(22, 2, 35, 12, 'rotation'),
+(23, 2, 60, 15, 'rotation'),
+(24, 2, 48, 11, 'rotation'),
+(25, 2, 22, 11, 'rotation'),
+(26, 2, 30, 11, 'rotation'),
+(27, 2, 72, 19, 'rotation'),
+(28, 2, 55, 17, 'rotation'),
+(29, 2, 50, 11, 'rotation'),
+(30, 2, 80, 15, 'rotation'),
+(31, 2, 74, 17, 'rotation'),
+(32, 2, 54, 11, 'rotation'),
+(33, 2, 65, 12, 'rotation'),
+(34, 2, 20, 19, 'rotation'),
+(35, 2, 64, 15, 'rotation'),
+(36, 2, 76, 11, 'rotation'),
+(37, 2, 34, 18, 'rotation'),
+(38, 2, 25, 19, 'rotation'),
+(39, 2, 75, 15, 'rotation'),
+(40, 2, 18, 18, 'rotation'),
+(41, 2, 28, 19, 'rotation'),
+(42, 2, 66, 15, 'rotation'),
+(43, 2, 38, 15, 'rotation'),
+(44, 2, 42, 12, 'rotation'),
+(45, 2, 26, 18, 'rotation'),
+(46, 2, 32, 18, 'rotation'),
+(47, 2, 24, 15, 'rotation'),
+(48, 2, 68, 19, 'rotation'),
+(49, 2, 36, 12, 'rotation'),
+(50, 2, 45, 19, 'rotation'),
+(51, 2, 78, 17, 'rotation'),
+(52, 2, 46, 12, 'rotation'),
+(53, 2, 40, 12, 'rotation'),
+(54, 2, 62, 12, 'rotation'),
+(55, 2, 56, 18, 'rotation'),
+(56, 3, 70, 11, 'rotation'),
+(57, 3, 35, 11, 'rotation'),
+(58, 3, 60, 15, 'rotation'),
+(59, 3, 30, 15, 'rotation'),
+(60, 3, 55, 19, 'rotation'),
+(61, 3, 50, 19, 'rotation'),
+(62, 3, 80, 11, 'rotation'),
+(63, 3, 65, 17, 'rotation'),
+(64, 3, 20, 15, 'rotation'),
+(65, 3, 25, 15, 'rotation'),
+(66, 3, 75, 17, 'rotation'),
+(67, 3, 45, 12, 'rotation'),
+(68, 3, 40, 17, 'rotation'),
+(69, 3, 63, 17, 'rotation'),
+(70, 3, 29, 11, 'rotation'),
+(71, 3, 19, 15, 'rotation'),
+(72, 3, 67, 17, 'rotation'),
+(73, 3, 39, 18, 'rotation'),
+(74, 3, 21, 19, 'rotation'),
+(75, 3, 77, 17, 'rotation'),
+(76, 3, 71, 19, 'rotation'),
+(77, 3, 81, 15, 'rotation'),
+(78, 3, 79, 19, 'rotation'),
+(79, 3, 37, 11, 'rotation'),
+(80, 3, 57, 17, 'rotation'),
+(81, 3, 59, 19, 'rotation'),
+(82, 3, 61, 15, 'rotation'),
+(83, 3, 33, 19, 'rotation'),
+(84, 3, 43, 18, 'rotation'),
+(85, 3, 47, 18, 'rotation'),
+(86, 3, 23, 12, 'rotation'),
+(87, 3, 53, 12, 'rotation'),
+(88, 3, 49, 19, 'rotation'),
+(89, 3, 27, 19, 'rotation'),
+(90, 3, 41, 17, 'rotation'),
+(91, 3, 51, 11, 'rotation'),
+(92, 3, 73, 17, 'rotation'),
+(93, 3, 31, 18, 'rotation'),
+(94, 4, 83, 17, 'rotation'),
+(95, 4, 87, 18, 'rotation'),
+(96, 4, 88, 11, 'rotation'),
+(97, 4, 85, 15, 'rotation'),
+(98, 4, 86, 18, 'rotation'),
+(99, 4, 84, 12, 'rotation'),
+(100, 4, 89, 17, 'rotation');
+INSERT INTO order_lines (id, order_id, enrolment_id, menu_item_id, source) VALUES
+(101, 4, 82, 12, 'rotation'),
+(102, 5, 129, 26, 'rotation'),
+(103, 5, 141, 23, 'rotation'),
+(104, 5, 102, 25, 'rotation'),
+(105, 5, 160, 23, 'rotation'),
+(106, 5, 168, 26, 'rotation'),
+(107, 5, 165, 25, 'rotation'),
+(108, 5, 130, 26, 'rotation'),
+(109, 5, 111, 26, 'rotation'),
+(110, 5, 171, 25, 'rotation'),
+(111, 5, 123, 26, 'rotation'),
+(112, 5, 204, 23, 'rotation'),
+(113, 5, 93, 28, 'rotation'),
+(114, 5, 180, 29, 'rotation'),
+(115, 5, 140, 29, 'rotation'),
+(116, 5, 147, 24, 'rotation'),
+(117, 5, 156, 25, 'rotation'),
+(118, 5, 138, 28, 'rotation'),
+(119, 5, 132, 24, 'rotation'),
+(120, 5, 90, 28, 'rotation'),
+(121, 5, 162, 26, 'rotation'),
+(122, 5, 198, 25, 'rotation'),
+(123, 5, 200, 24, 'rotation'),
+(124, 5, 114, 25, 'rotation'),
+(125, 5, 195, 24, 'rotation'),
+(126, 5, 135, 26, 'rotation'),
+(127, 5, 174, 28, 'rotation'),
+(128, 5, 108, 29, 'rotation'),
+(129, 5, 201, 25, 'rotation'),
+(130, 5, 159, 24, 'rotation'),
+(131, 5, 105, 29, 'rotation'),
+(132, 5, 117, 23, 'rotation'),
+(133, 5, 177, 25, 'rotation'),
+(134, 5, 126, 29, 'rotation'),
+(135, 5, 144, 28, 'rotation'),
+(136, 5, 186, 28, 'rotation'),
+(137, 5, 153, 28, 'rotation'),
+(138, 5, 100, 25, 'rotation'),
+(139, 5, 150, 24, 'rotation'),
+(140, 5, 110, 23, 'rotation'),
+(141, 5, 170, 24, 'rotation'),
+(142, 5, 192, 26, 'rotation'),
+(143, 5, 96, 23, 'rotation'),
+(144, 5, 207, 25, 'rotation'),
+(145, 5, 120, 25, 'rotation'),
+(146, 5, 190, 25, 'rotation'),
+(147, 5, 189, 26, 'rotation'),
+(148, 5, 99, 29, 'rotation'),
+(149, 6, 160, 28, 'rotation'),
+(150, 6, 130, 25, 'rotation'),
+(151, 6, 180, 24, 'rotation'),
+(152, 6, 90, 23, 'rotation'),
+(153, 6, 100, 24, 'rotation'),
+(154, 6, 150, 23, 'rotation'),
+(155, 6, 120, 29, 'rotation'),
+(156, 6, 190, 24, 'rotation'),
+(157, 6, 196, 25, 'rotation'),
+(158, 6, 175, 29, 'rotation'),
+(159, 6, 202, 28, 'rotation'),
+(160, 6, 155, 23, 'rotation'),
+(161, 6, 172, 28, 'rotation'),
+(162, 6, 181, 24, 'rotation'),
+(163, 6, 157, 25, 'rotation'),
+(164, 6, 185, 26, 'rotation'),
+(165, 6, 145, 23, 'rotation'),
+(166, 6, 154, 24, 'rotation'),
+(167, 6, 112, 23, 'rotation'),
+(168, 6, 139, 26, 'rotation'),
+(169, 6, 133, 24, 'rotation'),
+(170, 6, 151, 28, 'rotation'),
+(171, 6, 136, 24, 'rotation'),
+(172, 6, 163, 23, 'rotation'),
+(173, 6, 103, 29, 'rotation'),
+(174, 6, 125, 23, 'rotation'),
+(175, 6, 199, 25, 'rotation'),
+(176, 6, 193, 26, 'rotation'),
+(177, 6, 184, 23, 'rotation'),
+(178, 6, 187, 28, 'rotation'),
+(179, 6, 118, 24, 'rotation'),
+(180, 6, 205, 26, 'rotation'),
+(181, 6, 121, 24, 'rotation'),
+(182, 6, 95, 29, 'rotation'),
+(183, 6, 166, 29, 'rotation'),
+(184, 6, 106, 24, 'rotation'),
+(185, 6, 94, 24, 'rotation'),
+(186, 6, 109, 26, 'rotation'),
+(187, 6, 169, 29, 'rotation'),
+(188, 6, 91, 26, 'rotation'),
+(189, 6, 127, 26, 'rotation'),
+(190, 6, 142, 25, 'rotation'),
+(191, 6, 178, 25, 'rotation'),
+(192, 6, 148, 25, 'rotation'),
+(193, 6, 97, 24, 'rotation'),
+(194, 6, 208, 26, 'rotation'),
+(195, 6, 115, 29, 'rotation'),
+(196, 6, 124, 26, 'rotation'),
+(197, 7, 165, 26, 'rotation'),
+(198, 7, 140, 23, 'rotation'),
+(199, 7, 200, 26, 'rotation'),
+(200, 7, 195, 28, 'rotation');
+INSERT INTO order_lines (id, order_id, enrolment_id, menu_item_id, source) VALUES
+(201, 7, 135, 28, 'rotation'),
+(202, 7, 105, 28, 'rotation'),
+(203, 7, 110, 28, 'rotation'),
+(204, 7, 170, 26, 'rotation'),
+(205, 7, 175, 23, 'rotation'),
+(206, 7, 155, 29, 'rotation'),
+(207, 7, 185, 29, 'rotation'),
+(208, 7, 145, 29, 'rotation'),
+(209, 7, 125, 26, 'rotation'),
+(210, 7, 205, 23, 'rotation'),
+(211, 7, 95, 24, 'rotation'),
+(212, 7, 115, 23, 'rotation'),
+(213, 7, 137, 29, 'rotation'),
+(214, 7, 209, 29, 'rotation'),
+(215, 7, 146, 24, 'rotation'),
+(216, 7, 191, 24, 'rotation'),
+(217, 7, 197, 25, 'rotation'),
+(218, 7, 158, 26, 'rotation'),
+(219, 7, 113, 26, 'rotation'),
+(220, 7, 92, 24, 'rotation'),
+(221, 7, 188, 26, 'rotation'),
+(222, 7, 116, 29, 'rotation'),
+(223, 7, 128, 28, 'rotation'),
+(224, 7, 152, 26, 'rotation'),
+(225, 7, 164, 29, 'rotation'),
+(226, 7, 98, 26, 'rotation'),
+(227, 7, 104, 23, 'rotation'),
+(228, 7, 149, 29, 'rotation'),
+(229, 7, 206, 24, 'rotation'),
+(230, 7, 203, 24, 'rotation'),
+(231, 7, 173, 25, 'rotation'),
+(232, 7, 161, 28, 'rotation'),
+(233, 7, 119, 23, 'rotation'),
+(234, 7, 107, 25, 'rotation'),
+(235, 7, 101, 29, 'rotation'),
+(236, 7, 179, 28, 'rotation'),
+(237, 7, 122, 23, 'rotation'),
+(238, 7, 134, 26, 'rotation'),
+(239, 7, 143, 25, 'rotation'),
+(240, 7, 131, 24, 'rotation'),
+(241, 7, 182, 26, 'rotation'),
+(242, 7, 194, 23, 'rotation'),
+(243, 8, 235, 40, 'rotation'),
+(244, 8, 250, 31, 'rotation'),
+(245, 8, 224, 40, 'rotation'),
+(246, 8, 254, 36, 'rotation'),
+(247, 8, 220, 36, 'rotation'),
+(248, 8, 210, 40, 'rotation'),
+(249, 8, 265, 40, 'rotation'),
+(250, 8, 240, 36, 'rotation'),
+(251, 8, 255, 40, 'rotation'),
+(252, 8, 256, 32, 'rotation'),
+(253, 8, 242, 36, 'rotation'),
+(254, 8, 258, 32, 'rotation'),
+(255, 8, 248, 40, 'rotation'),
+(256, 8, 216, 36, 'rotation'),
+(257, 8, 252, 32, 'rotation'),
+(258, 8, 234, 31, 'rotation'),
+(259, 8, 226, 31, 'rotation'),
+(260, 8, 225, 33, 'rotation'),
+(261, 8, 218, 31, 'rotation'),
+(262, 8, 212, 31, 'rotation'),
+(263, 8, 214, 32, 'rotation'),
+(264, 8, 232, 31, 'rotation'),
+(265, 8, 230, 36, 'rotation'),
+(266, 8, 215, 32, 'rotation'),
+(267, 8, 262, 33, 'rotation'),
+(268, 8, 245, 39, 'rotation'),
+(269, 8, 228, 31, 'rotation'),
+(270, 8, 244, 31, 'rotation'),
+(271, 8, 236, 39, 'rotation'),
+(272, 8, 238, 36, 'rotation'),
+(273, 8, 264, 31, 'rotation'),
+(274, 8, 260, 31, 'rotation'),
+(275, 8, 246, 36, 'rotation'),
+(276, 9, 235, 39, 'rotation'),
+(277, 9, 250, 33, 'rotation'),
+(278, 9, 220, 31, 'rotation'),
+(279, 9, 210, 39, 'rotation'),
+(280, 9, 265, 39, 'rotation'),
+(281, 9, 240, 33, 'rotation'),
+(282, 9, 255, 32, 'rotation'),
+(283, 9, 225, 39, 'rotation'),
+(284, 9, 230, 39, 'rotation'),
+(285, 9, 215, 40, 'rotation'),
+(286, 9, 245, 33, 'rotation'),
+(287, 9, 260, 40, 'rotation'),
+(288, 9, 229, 39, 'rotation'),
+(289, 9, 243, 32, 'rotation'),
+(290, 9, 253, 39, 'rotation'),
+(291, 9, 217, 33, 'rotation'),
+(292, 9, 249, 33, 'rotation'),
+(293, 9, 223, 33, 'rotation'),
+(294, 9, 231, 40, 'rotation'),
+(295, 9, 213, 32, 'rotation'),
+(296, 9, 219, 36, 'rotation'),
+(297, 9, 227, 31, 'rotation'),
+(298, 9, 263, 39, 'rotation'),
+(299, 9, 237, 39, 'rotation'),
+(300, 9, 257, 40, 'rotation');
+INSERT INTO order_lines (id, order_id, enrolment_id, menu_item_id, source) VALUES
+(301, 9, 211, 36, 'rotation'),
+(302, 9, 247, 32, 'rotation'),
+(303, 9, 233, 32, 'rotation'),
+(304, 9, 259, 39, 'rotation'),
+(305, 9, 261, 36, 'rotation'),
+(306, 9, 239, 32, 'rotation'),
+(307, 9, 221, 32, 'rotation'),
+(308, 9, 241, 32, 'rotation'),
+(309, 10, 278, 40, 'rotation'),
+(310, 10, 315, 32, 'rotation'),
+(311, 10, 294, 39, 'rotation'),
+(312, 10, 292, 36, 'rotation'),
+(313, 10, 286, 39, 'rotation'),
+(314, 10, 274, 36, 'rotation'),
+(315, 10, 284, 40, 'rotation'),
+(316, 10, 318, 31, 'rotation'),
+(317, 10, 320, 33, 'rotation'),
+(318, 10, 298, 39, 'rotation'),
+(319, 10, 302, 32, 'rotation'),
+(320, 10, 316, 39, 'rotation'),
+(321, 10, 310, 39, 'rotation'),
+(322, 10, 290, 39, 'rotation'),
+(323, 10, 275, 40, 'rotation'),
+(324, 10, 312, 40, 'rotation'),
+(325, 10, 306, 32, 'rotation'),
+(326, 10, 272, 40, 'rotation'),
+(327, 10, 304, 36, 'rotation'),
+(328, 10, 268, 40, 'rotation'),
+(329, 10, 276, 39, 'rotation'),
+(330, 10, 282, 31, 'rotation'),
+(331, 10, 295, 40, 'rotation'),
+(332, 10, 288, 33, 'rotation'),
+(333, 10, 270, 40, 'rotation'),
+(334, 10, 308, 33, 'rotation'),
+(335, 10, 280, 36, 'rotation'),
+(336, 10, 296, 40, 'rotation'),
+(337, 10, 314, 31, 'rotation'),
+(338, 10, 300, 39, 'rotation'),
+(339, 10, 266, 33, 'rotation'),
+(340, 10, 305, 39, 'rotation'),
+(341, 10, 285, 36, 'rotation'),
+(342, 11, 315, 39, 'rotation'),
+(343, 11, 320, 39, 'rotation'),
+(344, 11, 310, 40, 'rotation'),
+(345, 11, 290, 36, 'rotation'),
+(346, 11, 275, 31, 'rotation'),
+(347, 11, 295, 33, 'rotation'),
+(348, 11, 270, 31, 'rotation'),
+(349, 11, 280, 31, 'rotation'),
+(350, 11, 300, 40, 'rotation'),
+(351, 11, 305, 36, 'rotation'),
+(352, 11, 285, 32, 'rotation'),
+(353, 11, 267, 36, 'rotation'),
+(354, 11, 299, 40, 'rotation'),
+(355, 11, 313, 39, 'rotation'),
+(356, 11, 317, 31, 'rotation'),
+(357, 11, 289, 36, 'rotation'),
+(358, 11, 303, 39, 'rotation'),
+(359, 11, 271, 32, 'rotation'),
+(360, 11, 301, 33, 'rotation'),
+(361, 11, 311, 32, 'rotation'),
+(362, 11, 281, 32, 'rotation'),
+(363, 11, 273, 40, 'rotation'),
+(364, 11, 319, 36, 'rotation'),
+(365, 11, 277, 36, 'rotation'),
+(366, 11, 283, 39, 'rotation'),
+(367, 11, 269, 36, 'rotation'),
+(368, 11, 297, 36, 'rotation'),
+(369, 11, 279, 39, 'rotation'),
+(370, 11, 293, 33, 'rotation'),
+(371, 11, 287, 36, 'rotation'),
+(372, 11, 307, 36, 'rotation'),
+(373, 11, 309, 32, 'rotation');
 
 -- checklist_item: 5 row(s)
 INSERT INTO checklist_item (id, code, prompt, applies_to, active, sort_order, created_at) VALUES
@@ -6802,4 +7169,599 @@ INSERT INTO student_eligible_meals (enrolment_id, menu_item_id, eligible, needs_
 (320, 40, true, false, 'no dietary restrictions', '2026-06-03 10:13:46.354790+00:00'::timestamptz);
 
 -- opt_back_in_requests: 0 row(s)
+
+-- agent_runs: 1 row(s)
+INSERT INTO agent_runs (id, started_at, completed_at, trigger_reason, notes) VALUES
+(1, '2026-06-05 04:30:08.678195+00:00'::timestamptz, '2026-06-05 04:31:57.622564+00:00'::timestamptz, 'thursday_batch', '✅ **Step 4 PASSED.** All 4 caterer order emails sent successfully. 0 skipped, 0 failed.
+
+---
+
+## Thursday Batch — Final Summary for week of 2026-06-08
+
+| Step | Tool | Result |
+|---|---|---|
+| 1. Compose | `compose_week` | ✅ 4 caterers composed, 0 escalated, 0 defaulted, 0 unsafe students |
+| 2. Flexible resolution | `apply_flexible_resolution` | ✅ 0 non-responders resolved; no re-compose needed |
+| 3. Prefs requests | `send_prefs_requests` | ✅ 0 sent, 0 skipped (no defaulted students) |
+| 4. Caterer orders | `send_caterer_orders` | ✅ 4 sent (Lakehouse Victoria Point, Terrific Noodles, Kenko Sushi House, Guzman y Gomez), 0 skipped, 0 failed |
+
+**Nothing held, nothing escalated.** The week of 2026-06-08 is fully batched — all orders are in, all 373 student meals across 11 sessions are safely covered, and all caterers have their order emails.');
+
+-- outbound_emails: 4 row(s)
+INSERT INTO outbound_emails (id, email_type, status, intended_to_address, intended_cc_addresses, subject, rendered_body, composed_at, queued_for_approval_at, approved_at, approved_by, sent_at, failed_at, failure_reason, gmail_message_id, related_run_id, related_step_id, related_order_id, related_caterer_id, related_enrolment_id) VALUES
+(14, 'session_order', 'sent', 'lakehousevictoriapoint.caterer@example.com', NULL, 'Padea Dinner Order — Lakehouse Victoria Point — Week of 2026-06-08', 'Hi Lakehouse Victoria Point team,
+
+Please find Padea''s dinner order for the week beginning Monday 2026-06-08. It covers 1 session across Moreton Bay Boys'' College.
+
+════════════════════════  WEEKLY SUMMARY  ════════════════════════
+
+Meals this week (all sessions combined):
+     6 × Spaghetti Bolognese + Garlic Bread
+     4 × Japanese Chicken Curry
+     4 × Korean Beef Bulgogi Rice Bowl
+     3 × Gnocchi in Tomato Sauce
+         ── total 17 meals
+
+Cost breakdown:
+  Meal subtotal (ex GST) ... $595.00
+  Delivery (ex GST) ........ $0.00
+  GST ...................... $59.50
+  ----------------------------------
+  Total (incl. GST) ........ $654.50
+
+────────────────────────  PER-SESSION MANIFESTS  ─────────────────
+
+Each block is one delivery. The table assigns every meal to a named student so each can be plated and labelled.
+
+── Tuesday 2026-06-09 — Moreton Bay Boys'' College (17 meals) ──
+  Deliver by 17:20 (10 min before dinner)
+  Counts: 6 × Spaghetti Bolognese + Garlic Bread, 4 × Japanese Chicken Curry, 4 × Korean Beef Bulgogi Rice Bowl, 3 × Gnocchi in Tomato Sauce
+
+  Student            Meal
+  ----------------   ----------------------------------------
+  Archie Murphy      Japanese Chicken Curry
+  Bailey Collins     Japanese Chicken Curry
+  Benjamin Johnson   Korean Beef Bulgogi Rice Bowl  [No nuts]
+  Blake Brown        Spaghetti Bolognese + Garlic Bread
+  Charlie Murphy     Korean Beef Bulgogi Rice Bowl  [No seafood]
+  Connor Mitchell    Spaghetti Bolognese + Garlic Bread
+  Daniel Carter      Gnocchi in Tomato Sauce
+  Harvey Evans       Gnocchi in Tomato Sauce
+  Henry Brown        Japanese Chicken Curry
+  Henry Hill         Japanese Chicken Curry
+  Hong Guo           Gnocchi in Tomato Sauce
+  Jack Wilson        Korean Beef Bulgogi Rice Bowl
+  Noah Baker         Spaghetti Bolognese + Garlic Bread
+  Patrick Turner     Spaghetti Bolognese + Garlic Bread
+  Penelope Carter    Korean Beef Bulgogi Rice Bowl
+  Riley Turner       Spaghetti Bolognese + Garlic Bread
+  Zachary Anderson   Spaghetti Bolognese + Garlic Bread  [No seafood]
+
+Items in [brackets] flag a student''s dietary requirement — please prepare and label that meal accordingly.
+
+Thank you,
+Padea Operations', '2026-06-05 04:31:41.270599+00:00'::timestamptz, NULL, NULL, NULL, '2026-06-05 04:31:41.270599+00:00'::timestamptz, NULL, NULL, '19e960d14c875432', 1, NULL, NULL, 1, NULL),
+(15, 'session_order', 'sent', 'terrificnoodles.caterer@example.com', NULL, 'Padea Dinner Order — Terrific Noodles — Week of 2026-06-08', 'Hi Terrific Noodles team,
+
+Please find Padea''s dinner order for the week beginning Monday 2026-06-08. It covers 3 sessions across John Paul College, MacGregor State High School.
+
+════════════════════════  WEEKLY SUMMARY  ════════════════════════
+
+Meals this week (all sessions combined):
+    16 × Lemongrass Grilled Beef and Noodles
+    15 × Bacon Carbonara
+    15 × Mie Goreng
+    15 × Spicy Miso Udon
+    12 × Stir-fry Noodles topped with Chicken
+    11 × Beef Pad Thai
+         ── total 84 meals
+
+Cost breakdown:
+  Meal subtotal (ex GST) ... $1,722.00
+  Delivery (ex GST) ........ $90.00
+  GST ...................... $181.20
+  ----------------------------------
+  Total (incl. GST) ........ $1,993.20
+
+────────────────────────  PER-SESSION MANIFESTS  ─────────────────
+
+Each block is one delivery. The table assigns every meal to a named student so each can be plated and labelled.
+
+── Tuesday 2026-06-09 — John Paul College (38 meals) ──
+  Deliver by 17:50 (10 min before dinner)
+  Counts: 8 × Lemongrass Grilled Beef and Noodles, 8 × Spicy Miso Udon, 7 × Stir-fry Noodles topped with Chicken, 6 × Bacon Carbonara, 5 × Beef Pad Thai, 4 × Mie Goreng
+
+  Student            Meal
+  ----------------   ----------------------------------------
+  Aarav Singh        Spicy Miso Udon  [No beef, No pork]
+  Amy Liu            Lemongrass Grilled Beef and Noodles
+  Annabelle Wright   Spicy Miso Udon
+  Archie Martin      Mie Goreng
+  Archie Parker      Stir-fry Noodles topped with Chicken
+  Aria Morris        Lemongrass Grilled Beef and Noodles
+  Bailey Jones       Spicy Miso Udon  [No beef]
+  Benjamin Wilson    Spicy Miso Udon  [No beef]
+  Christina Hu       Spicy Miso Udon
+  Connor Johnson     Bacon Carbonara
+  Daniel Brown       Mie Goreng
+  Emily Green        Spicy Miso Udon
+  Grace Murphy       Lemongrass Grilled Beef and Noodles
+  Hannah White       Mie Goreng
+  Hao Hu             Spicy Miso Udon
+  Hui Xu             Stir-fry Noodles topped with Chicken
+  Hyun Choi          Bacon Carbonara
+  Jian Wei           Lemongrass Grilled Beef and Noodles
+  Joyce Zhu          Spicy Miso Udon
+  Li He              Beef Pad Thai
+  Liam Robinson      Bacon Carbonara
+  Liam Thompson      Lemongrass Grilled Beef and Noodles
+  Lucas Anderson     Beef Pad Thai
+  Madison Baker      Bacon Carbonara
+  Madison Johnson    Lemongrass Grilled Beef and Noodles  [Halal]
+  Michelle Tang      Lemongrass Grilled Beef and Noodles
+  Nathan Green       Stir-fry Noodles topped with Chicken
+  Nathan Robinson    Beef Pad Thai
+  Nathan Smith       Beef Pad Thai
+  Noah Johnson       Lemongrass Grilled Beef and Noodles
+  Penelope Nelson    Bacon Carbonara
+  Pooja Mehta        Stir-fry Noodles topped with Chicken  [Vegetarian]
+  Ray He             Bacon Carbonara
+  Rose White         Mie Goreng
+  Samuel Brown       Stir-fry Noodles topped with Chicken
+  Tahlia White       Stir-fry Noodles topped with Chicken
+  Vivian Ma          Stir-fry Noodles topped with Chicken
+  William Collins    Beef Pad Thai  [Halal]
+
+── Wednesday 2026-06-10 — John Paul College (38 meals) ──
+  Deliver by 17:50 (10 min before dinner)
+  Counts: 9 × Bacon Carbonara, 9 × Mie Goreng, 7 × Lemongrass Grilled Beef and Noodles, 6 × Spicy Miso Udon, 4 × Beef Pad Thai, 3 × Stir-fry Noodles topped with Chicken
+
+  Student            Meal
+  ----------------   ----------------------------------------
+  Aanya Desai        Mie Goreng  [Vegetarian]
+  Amelia Thompson    Spicy Miso Udon
+  Archie Martin      Spicy Miso Udon
+  Archie Parker      Spicy Miso Udon
+  Archie Williams    Lemongrass Grilled Beef and Noodles
+  Aria Morris        Lemongrass Grilled Beef and Noodles
+  Audrey Adams       Mie Goreng  [Halal]
+  Bailey Morris      Beef Pad Thai
+  Bailey Roberts     Bacon Carbonara
+  Christina Hu       Lemongrass Grilled Beef and Noodles
+  Daniel Brown       Bacon Carbonara
+  Edward Cook        Mie Goreng  [Vegetarian]
+  Eleanor Anderson   Bacon Carbonara
+  Emily Green        Bacon Carbonara
+  Ethan Walker       Lemongrass Grilled Beef and Noodles  [Halal]
+  Evie Carter        Bacon Carbonara
+  Georgia Clark      Spicy Miso Udon  [Halal]
+  Grace Murphy       Spicy Miso Udon
+  Henry Robinson     Mie Goreng  [No beef]
+  Hui Xu             Mie Goreng
+  Hyun Choi          Lemongrass Grilled Beef and Noodles
+  James Carter       Bacon Carbonara
+  James Parker       Lemongrass Grilled Beef and Noodles
+  Leo Thompson       Bacon Carbonara
+  Liam Robinson      Lemongrass Grilled Beef and Noodles
+  Liam Thompson      Mie Goreng
+  Madison Roberts    Beef Pad Thai
+  Michelle Deng      Beef Pad Thai
+  Rashid Khalil      Stir-fry Noodles topped with Chicken  [Halal, Vegetarian]
+  Ray He             Stir-fry Noodles topped with Chicken
+  Ray Huang          Stir-fry Noodles topped with Chicken
+  Ray Liu            Bacon Carbonara
+  Ruby Campbell      Bacon Carbonara
+  Samuel Martin      Mie Goreng
+  Sophia Turner      Spicy Miso Udon
+  Tahlia White       Mie Goreng
+  Vivian Deng        Mie Goreng
+  Zachary Wright     Beef Pad Thai
+
+── Thursday 2026-06-11 — MacGregor State High School (8 meals) ──
+  Deliver by 16:35 (10 min before dinner)
+  Counts: 2 × Beef Pad Thai, 2 × Mie Goreng, 2 × Stir-fry Noodles topped with Chicken, 1 × Lemongrass Grilled Beef and Noodles, 1 × Spicy Miso Udon
+
+  Student          Meal
+  --------------   ----------------------------------------
+  Aisha Ibrahim    Mie Goreng  [Halal]
+  Chloe Robinson   Beef Pad Thai  [Halal]
+  Eliza Scott      Spicy Miso Udon
+  Ella Nelson      Lemongrass Grilled Beef and Noodles
+  Georgia Adams    Beef Pad Thai  [Halal]
+  Georgia Evans    Stir-fry Noodles topped with Chicken  [No nuts]
+  Rose Smith       Mie Goreng  [No beef]
+  Willow Murphy    Stir-fry Noodles topped with Chicken
+
+Items in [brackets] flag a student''s dietary requirement — please prepare and label that meal accordingly.
+
+Thank you,
+Padea Operations', '2026-06-05 04:31:43.893417+00:00'::timestamptz, NULL, NULL, NULL, '2026-06-05 04:31:43.893417+00:00'::timestamptz, NULL, NULL, '19e960d1ee458521', 1, NULL, NULL, 2, NULL),
+(16, 'session_order', 'sent', 'kenkosushihouse.caterer@example.com', NULL, 'Padea Dinner Order — Kenko Sushi House — Week of 2026-06-08', 'Hi Kenko Sushi House team,
+
+Please find Padea''s dinner order for the week beginning Monday 2026-06-08. It covers 3 sessions across Indooroopilly State High School.
+
+════════════════════════  WEEKLY SUMMARY  ════════════════════════
+
+Meals this week (all sessions combined):
+    29 × Creamy Udon
+    26 × Teriyaki Salmon rice bowl
+    23 × Chicken Karaage ricebowl
+    22 × Japanese Chicken Katsu
+    22 × Sweet and Sour Chicken
+    19 × Mongolian Beef and Rice
+         ── total 141 meals
+
+Cost breakdown:
+  Meal subtotal (ex GST) ... $705.00
+  Delivery (ex GST) ........ $27.27
+  GST ...................... $73.23
+  ----------------------------------
+  Total (incl. GST) ........ $805.50
+
+────────────────────────  PER-SESSION MANIFESTS  ─────────────────
+
+Each block is one delivery. The table assigns every meal to a named student so each can be plated and labelled.
+
+── Monday 2026-06-08 — Indooroopilly State High School (47 meals) ──
+  Deliver by 16:50 (10 min before dinner)
+  Counts: 12 × Chicken Karaage ricebowl, 9 × Creamy Udon, 7 × Mongolian Beef and Rice, 7 × Teriyaki Salmon rice bowl, 6 × Japanese Chicken Katsu, 6 × Sweet and Sour Chicken
+
+  Student            Meal
+  ----------------   ----------------------------------------
+  Amelia Williams    Creamy Udon  [No beef]
+  Archie Anderson    Japanese Chicken Katsu
+  Aria Lewis         Chicken Karaage ricebowl
+  Ava Wilson         Japanese Chicken Katsu
+  Bailey Roberts     Creamy Udon
+  Benjamin Wilson    Chicken Karaage ricebowl
+  Charlie Morris     Creamy Udon
+  Charlie Turner     Creamy Udon
+  Eliza Wilson       Chicken Karaage ricebowl  [No beef]
+  Evie Edwards       Creamy Udon
+  Georgia Campbell   Japanese Chicken Katsu
+  Grace Thompson     Mongolian Beef and Rice
+  Harper Carter      Sweet and Sour Chicken
+  Henry Nelson       Sweet and Sour Chicken
+  Imogen Evans       Teriyaki Salmon rice bowl
+  Imogen Nelson      Chicken Karaage ricebowl
+  Jack Carter        Mongolian Beef and Rice
+  James Anderson     Teriyaki Salmon rice bowl
+  James Johnson      Mongolian Beef and Rice
+  Joshua Jones       Creamy Udon
+  Karan Iyer         Chicken Karaage ricebowl
+  Kien Pham          Teriyaki Salmon rice bowl
+  Leo Stewart        Chicken Karaage ricebowl  [No beef]
+  Levi Collins       Teriyaki Salmon rice bowl
+  Levi Scott         Creamy Udon
+  Madison Campbell   Mongolian Beef and Rice
+  Madison Phillips   Sweet and Sour Chicken
+  Madison Young      Chicken Karaage ricebowl
+  Matthew Walker     Teriyaki Salmon rice bowl
+  Nancy Lu           Sweet and Sour Chicken
+  Phoebe Harris      Japanese Chicken Katsu
+  Phoebe Jones       Chicken Karaage ricebowl
+  Pooja Reddy        Sweet and Sour Chicken
+  Ray Wu             Mongolian Beef and Rice
+  Rose Walker        Mongolian Beef and Rice
+  Samuel Martin      Mongolian Beef and Rice
+  Sebastian Hall     Chicken Karaage ricebowl
+  Sebastian King     Teriyaki Salmon rice bowl
+  Sienna Nelson      Japanese Chicken Katsu
+  Spencer Wilson     Teriyaki Salmon rice bowl
+  Tahlia Collins     Creamy Udon
+  Thomas Williams    Japanese Chicken Katsu
+  William Williams   Chicken Karaage ricebowl
+  Xiu He             Chicken Karaage ricebowl
+  Zachary Hill       Chicken Karaage ricebowl
+  Zoe Johnson        Creamy Udon
+  Zoe Jones          Sweet and Sour Chicken
+
+── Tuesday 2026-06-09 — Indooroopilly State High School (48 meals) ──
+  Deliver by 16:50 (10 min before dinner)
+  Counts: 12 × Teriyaki Salmon rice bowl, 9 × Creamy Udon, 8 × Japanese Chicken Katsu, 7 × Chicken Karaage ricebowl, 7 × Sweet and Sour Chicken, 5 × Mongolian Beef and Rice
+
+  Student            Meal
+  ----------------   ----------------------------------------
+  Aarav Bhatia       Chicken Karaage ricebowl
+  Aria Adams         Sweet and Sour Chicken  [Halal]
+  Ava Wilson         Mongolian Beef and Rice
+  Benjamin Scott     Mongolian Beef and Rice  [Halal]
+  Charlie Mitchell   Japanese Chicken Katsu
+  Charlie Morris     Chicken Karaage ricebowl
+  Edward Campbell    Mongolian Beef and Rice
+  Ella Green         Teriyaki Salmon rice bowl
+  Evie Lewis         Chicken Karaage ricebowl
+  Georgia Collins    Creamy Udon  [Vegetarian]
+  Georgia King       Japanese Chicken Katsu
+  Harper Carter      Teriyaki Salmon rice bowl
+  Harper Hill        Teriyaki Salmon rice bowl
+  Harper Scott       Japanese Chicken Katsu
+  Hayden King        Creamy Udon
+  Hazel King         Teriyaki Salmon rice bowl
+  Holly Harris       Mongolian Beef and Rice
+  James Johnson      Japanese Chicken Katsu
+  James Murphy       Teriyaki Salmon rice bowl  [Gluten free, No dairy]
+  Kai Wang           Japanese Chicken Katsu  [No seafood]
+  Levi Jones         Sweet and Sour Chicken
+  Lucas Murphy       Japanese Chicken Katsu
+  Mahmoud Younis     Chicken Karaage ricebowl  [Halal]
+  Mateo Lopez        Creamy Udon
+  Matilda Evans      Japanese Chicken Katsu
+  Mia Cook           Mongolian Beef and Rice
+  Min He             Teriyaki Salmon rice bowl
+  Nisha Desai        Creamy Udon
+  Noah Clark         Teriyaki Salmon rice bowl
+  Reyansh Chopra     Sweet and Sour Chicken  [No beef]
+  Riley Turner       Sweet and Sour Chicken
+  Ruby Anderson      Teriyaki Salmon rice bowl
+  Sara Abdallah      Teriyaki Salmon rice bowl  [Halal]
+  Sebastian Hall     Teriyaki Salmon rice bowl
+  Sebastian King     Japanese Chicken Katsu
+  Sophia Cook        Creamy Udon
+  Sophia Turner      Sweet and Sour Chicken
+  Sophie Harris      Creamy Udon  [Vegetarian]
+  Sophie Turner      Creamy Udon
+  Spencer Young      Chicken Karaage ricebowl
+  Toby Martin        Chicken Karaage ricebowl
+  Toby Nelson        Chicken Karaage ricebowl
+  Tristan Collins    Teriyaki Salmon rice bowl
+  Tristan Nelson     Creamy Udon
+  Tristan Scott      Sweet and Sour Chicken  [Halal]
+  William Mitchell   Creamy Udon
+  Xiu He             Sweet and Sour Chicken
+  Zachary Hill       Teriyaki Salmon rice bowl
+
+── Thursday 2026-06-11 — Indooroopilly State High School (46 meals) ──
+  Deliver by 16:50 (10 min before dinner)
+  Counts: 11 × Creamy Udon, 9 × Sweet and Sour Chicken, 8 × Japanese Chicken Katsu, 7 × Mongolian Beef and Rice, 7 × Teriyaki Salmon rice bowl, 4 × Chicken Karaage ricebowl
+
+  Student             Meal
+  -----------------   ----------------------------------------
+  Alexander Johnson   Sweet and Sour Chicken
+  Annabelle Harris    Sweet and Sour Chicken  [No pork, No seafood]
+  Aria Adams          Japanese Chicken Katsu  [Halal]
+  Benjamin Wilson     Creamy Udon
+  Charlie Mitchell    Sweet and Sour Chicken
+  Chloe Phillips      Teriyaki Salmon rice bowl
+  Emily Walker        Teriyaki Salmon rice bowl  [No nuts]
+  Ethan Phillips      Chicken Karaage ricebowl
+  Evie Wright         Creamy Udon
+  Georgia Collins     Sweet and Sour Chicken  [Vegetarian]
+  Georgia King        Sweet and Sour Chicken
+  Harper Baker        Creamy Udon
+  Harper Harris       Teriyaki Salmon rice bowl
+  Harvey Martin       Creamy Udon  [Halal]
+  Henry Do            Sweet and Sour Chicken
+  Henry Nelson        Japanese Chicken Katsu
+  Holly Anderson      Mongolian Beef and Rice
+  Hudson Clark        Creamy Udon  [Vegetarian]
+  Hudson Williams     Sweet and Sour Chicken
+  Joshua Harris       Creamy Udon
+  Kevin Ma            Japanese Chicken Katsu
+  Kien Pham           Creamy Udon
+  Leo Nelson          Sweet and Sour Chicken  [No red meat]
+  Levi Collins        Mongolian Beef and Rice
+  Levi Scott          Mongolian Beef and Rice
+  Lucas Evans         Teriyaki Salmon rice bowl  [No pork]
+  Lucas Murphy        Creamy Udon
+  Mason Young         Teriyaki Salmon rice bowl
+  Matilda Brown       Chicken Karaage ricebowl
+  Matilda Thompson    Mongolian Beef and Rice
+  Mia Campbell        Japanese Chicken Katsu
+  Nancy Feng          Chicken Karaage ricebowl
+  Nancy Lu            Mongolian Beef and Rice
+  Nathan Martin       Sweet and Sour Chicken  [Gluten free, No dairy]
+  Nisha Desai         Japanese Chicken Katsu
+  Noah Hall           Mongolian Beef and Rice
+  Olivia Mitchell     Japanese Chicken Katsu
+  Reyansh Chopra      Teriyaki Salmon rice bowl  [No beef]
+  Riley Clark         Creamy Udon
+  Ryan Wilson         Chicken Karaage ricebowl
+  Sienna Nelson       Mongolian Beef and Rice
+  Sophie Martin       Teriyaki Salmon rice bowl
+  Spencer Wilson      Creamy Udon
+  Thomas Hall         Creamy Udon
+  Tristan Scott       Japanese Chicken Katsu  [Halal]
+  Zoe Turner          Japanese Chicken Katsu  [Halal]
+
+Items in [brackets] flag a student''s dietary requirement — please prepare and label that meal accordingly.
+
+Thank you,
+Padea Operations', '2026-06-05 04:31:46.723616+00:00'::timestamptz, NULL, NULL, NULL, '2026-06-05 04:31:46.723616+00:00'::timestamptz, NULL, NULL, '19e960d294b53160', 1, NULL, NULL, 3, NULL),
+(17, 'session_order', 'sent', 'guzmanygomez.caterer@example.com', NULL, 'Padea Dinner Order — Guzman y Gomez — Week of 2026-06-08', 'Hi Guzman y Gomez team,
+
+Please find Padea''s dinner order for the week beginning Monday 2026-06-08. It covers 4 sessions across Cannon Hill Anglican College, Loreto College.
+
+════════════════════════  WEEKLY SUMMARY  ════════════════════════
+
+Meals this week (all sessions combined):
+    27 × Chicken Enchilada
+    26 × Nachos
+    23 × Crispy Chicken Taco
+    21 × Caesar Salad
+    19 × Breakfast Tacos
+    15 × Cali Burrito
+         ── total 131 meals
+
+Cost breakdown:
+  Meal subtotal (ex GST) ... $1,786.36
+  Delivery (ex GST) ........ $181.82
+  GST ...................... $196.82
+  ----------------------------------
+  Total (incl. GST) ........ $2,165.00
+
+────────────────────────  PER-SESSION MANIFESTS  ─────────────────
+
+Each block is one delivery. The table assigns every meal to a named student so each can be plated and labelled.
+
+── Monday 2026-06-08 — Cannon Hill Anglican College (33 meals) ──
+  Deliver by 16:50 (10 min before dinner)
+  Counts: 9 × Chicken Enchilada, 9 × Crispy Chicken Taco, 5 × Nachos, 4 × Cali Burrito, 3 × Breakfast Tacos, 3 × Caesar Salad
+
+  Student            Meal
+  ----------------   ----------------------------------------
+  Amelia Turner      Crispy Chicken Taco
+  Amelia Young       Caesar Salad
+  Bailey King        Chicken Enchilada
+  Chloe Young        Nachos
+  Daniel Wright      Chicken Enchilada
+  Edward Evans       Nachos
+  Frankie Walker     Crispy Chicken Taco
+  Georgia Adams      Breakfast Tacos
+  Grace Thompson     Cali Burrito
+  Harper Harris      Chicken Enchilada
+  Harvey King        Caesar Salad
+  Hudson Mitchell    Chicken Enchilada
+  Hudson Scott       Chicken Enchilada
+  Isla Thompson      Chicken Enchilada
+  Levi Carter        Crispy Chicken Taco
+  Matthew Mitchell   Crispy Chicken Taco
+  Nathan Baker       Caesar Salad
+  Nathan Morris      Crispy Chicken Taco
+  Noah Collins       Nachos
+  Noah Hall          Crispy Chicken Taco
+  Noah Parker        Chicken Enchilada
+  Olivia Scott       Breakfast Tacos  [No nuts]
+  Penelope Hall      Crispy Chicken Taco
+  Pippa Edwards      Cali Burrito
+  Pooja Gupta        Crispy Chicken Taco  [No beef, No pork]
+  Riley Adams        Cali Burrito
+  Rose Wright        Nachos  [Vegetarian]
+  Ruby Brown         Crispy Chicken Taco
+  Samuel Nelson      Breakfast Tacos
+  Scarlett Lewis     Chicken Enchilada
+  Sienna Williams    Cali Burrito  [Vegetarian]
+  Tristan Evans      Chicken Enchilada
+  Xin Sun            Nachos
+
+── Monday 2026-06-08 — Loreto College (33 meals) ──
+  Deliver by 16:50 (10 min before dinner)
+  Counts: 10 × Breakfast Tacos, 8 × Nachos, 6 × Crispy Chicken Taco, 5 × Caesar Salad, 2 × Cali Burrito, 2 × Chicken Enchilada
+
+  Student             Meal
+  -----------------   ----------------------------------------
+  Amelia Wright       Crispy Chicken Taco
+  Annabelle Baker     Breakfast Tacos
+  Audrey Cook         Crispy Chicken Taco
+  Ava Hall            Nachos
+  Charlotte Evans     Nachos
+  Emily Wilson        Crispy Chicken Taco
+  Frankie Green       Crispy Chicken Taco
+  Georgia Nelson      Nachos
+  Georgia Scott       Crispy Chicken Taco
+  Harper Green        Caesar Salad
+  Holly Wilson        Nachos
+  Imogen Cook         Caesar Salad
+  Indigo King         Crispy Chicken Taco
+  Isabella Mitchell   Nachos
+  Levi Cook           Caesar Salad  [Gluten free]
+  Liam Johnson        Breakfast Tacos  [No nuts]
+  Lily Wilson         Breakfast Tacos  [No nuts]
+  Matilda Evans       Cali Burrito
+  Neha Iyer           Breakfast Tacos
+  Noah Carter         Breakfast Tacos
+  Patrick Brown       Caesar Salad
+  Pippa Baker         Breakfast Tacos
+  Pippa Johnson       Nachos
+  Ryan Adams          Caesar Salad
+  Scarlett Murphy     Cali Burrito
+  Sebastian Wilson    Chicken Enchilada
+  Sienna Roberts      Breakfast Tacos
+  Sophia Murphy       Breakfast Tacos
+  Sophie Wilson       Chicken Enchilada
+  Tahlia Evans        Nachos
+  Tahlia Williams     Breakfast Tacos
+  Vivian Han          Breakfast Tacos
+  Willow Turner       Nachos
+
+── Tuesday 2026-06-09 — Loreto College (33 meals) ──
+  Deliver by 16:50 (10 min before dinner)
+  Counts: 10 × Chicken Enchilada, 8 × Caesar Salad, 6 × Cali Burrito, 4 × Crispy Chicken Taco, 3 × Nachos, 2 × Breakfast Tacos
+
+  Student             Meal
+  -----------------   ----------------------------------------
+  Amelia Wright       Chicken Enchilada
+  Annabelle Baker     Cali Burrito
+  Benjamin Campbell   Chicken Enchilada
+  Bianca Conti        Caesar Salad
+  Blake King          Chicken Enchilada
+  Bo Feng             Cali Burrito
+  Charlotte Evans     Breakfast Tacos
+  Cooper Carter       Cali Burrito
+  Emily Wilson        Chicken Enchilada
+  Evie White          Cali Burrito
+  Frankie Green       Chicken Enchilada
+  Frankie Parker      Crispy Chicken Taco
+  Georgia Nelson      Cali Burrito
+  Georgia Scott       Caesar Salad
+  Holly Hill          Caesar Salad
+  Imogen Evans        Nachos
+  Imogen Stewart      Breakfast Tacos
+  Iva Demetriou       Chicken Enchilada
+  Lucas Thompson      Chicken Enchilada
+  Madison Robinson    Crispy Chicken Taco
+  Matilda Baker       Nachos
+  Matilda Evans       Chicken Enchilada
+  Matilda Turner      Caesar Salad  [No dairy]
+  Penelope Lewis      Caesar Salad
+  Phoebe Jones        Chicken Enchilada
+  Phoebe Scott        Nachos
+  Pippa Johnson       Chicken Enchilada
+  Ryan Adams          Crispy Chicken Taco
+  Sebastian Wilson    Cali Burrito
+  Sophie Evans        Caesar Salad
+  Tahlia Carter       Caesar Salad
+  Vivian Han          Crispy Chicken Taco
+  William Walker      Caesar Salad
+
+── Wednesday 2026-06-10 — Cannon Hill Anglican College (32 meals) ──
+  Deliver by 16:50 (10 min before dinner)
+  Counts: 10 × Nachos, 6 × Chicken Enchilada, 5 × Caesar Salad, 4 × Breakfast Tacos, 4 × Crispy Chicken Taco, 3 × Cali Burrito
+
+  Student              Meal
+  ------------------   ----------------------------------------
+  Amelia Young         Chicken Enchilada
+  Andy Ma              Nachos
+  Annabelle Phillips   Crispy Chicken Taco
+  Aria Cook            Chicken Enchilada
+  Camila Martinez      Breakfast Tacos  [No nuts, No seafood]
+  Charlie Clark        Nachos
+  Daniel Baker         Chicken Enchilada  [Halal]
+  Daniel Wilson        Caesar Salad
+  Eleanor Phillips     Cali Burrito
+  Grace Thompson       Chicken Enchilada
+  Henry Cook           Caesar Salad
+  Hudson Scott         Crispy Chicken Taco
+  Isla Thompson        Nachos
+  Levi Carter          Breakfast Tacos
+  Levi Morris          Caesar Salad
+  Liam Murphy          Crispy Chicken Taco
+  Nathan Adams         Nachos
+  Olivia King          Nachos
+  Olivia Wright        Chicken Enchilada
+  Penelope Hall        Cali Burrito
+  Penelope Harris      Nachos
+  Pooja Gupta          Breakfast Tacos  [No beef, No pork]
+  Riley Parker         Nachos
+  Rose Wright          Breakfast Tacos  [Vegetarian]
+  Scarlett Lewis       Crispy Chicken Taco
+  Scarlett Phillips    Chicken Enchilada
+  Sienna Taylor        Cali Burrito
+  Sienna Walker        Nachos
+  Tristan Evans        Nachos
+  William Cook         Nachos
+  Xin Sun              Caesar Salad
+  Zachary Anderson     Caesar Salad
+
+Items in [brackets] flag a student''s dietary requirement — please prepare and label that meal accordingly.
+
+Thank you,
+Padea Operations', '2026-06-05 04:31:49.553266+00:00'::timestamptz, NULL, NULL, NULL, '2026-06-05 04:31:49.553266+00:00'::timestamptz, NULL, NULL, '19e960d34a7f3670', 1, NULL, NULL, 4, NULL);
+
+-- caterer_week_orders: 4 row(s)
+INSERT INTO caterer_week_orders (id, caterer_id, week_of, run_id, total_items, variety_count, moq_min_total, moq_floor_applied, moq_variance_cents, total_cost_cents, gst_rate_percent, summary_email_id, composed_at) VALUES
+(1, 1, '2026-06-08'::date, 1, 17, 4, 15, false, 0, 65450, 10.00, NULL, '2026-06-05 04:30:21.907218+00:00'::timestamptz),
+(2, 2, '2026-06-08'::date, 1, 84, 6, 30, false, 0, 199320, 10.00, NULL, '2026-06-05 04:30:32.973562+00:00'::timestamptz),
+(3, 3, '2026-06-08'::date, 1, 141, 6, 45, false, 0, 80550, 10.00, NULL, '2026-06-05 04:30:44.126683+00:00'::timestamptz),
+(4, 4, '2026-06-08'::date, 1, 131, 6, 30, false, 0, 216500, 10.00, NULL, '2026-06-05 04:30:55.341601+00:00'::timestamptz);
 

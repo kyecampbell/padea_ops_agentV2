@@ -11,10 +11,15 @@ operator-authored content survives every reset:
 
 Three groups are managed:
 
-  SEED      — business inputs + the derived dietary pool + historical feedback.
-              Truncated and re-inserted verbatim from database/seed/seed.sql.
-  EPHEMERAL — agent-run artifacts (orders, runs, steps, escalations, emails,
-              inbound records). Truncated to empty; the agent regenerates them.
+  SEED      — business inputs + the derived dietary pool + historical feedback +
+              the captured operational state (orders, order_lines, the weekly
+              caterer summaries, the agent_runs that produced them, and their
+              outbound emails). Truncated and re-inserted verbatim from
+              database/seed/seed.sql, so a reset RESTORES that state rather than
+              clearing it. Re-capture with --capture to re-baseline to NOW.
+  EPHEMERAL — the remaining agent-run artifacts (agent_steps, escalations,
+              inbound records, citation logs). Truncated to empty; the agent
+              regenerates them.
   PRESERVE  — cases + decision_annotations. NEVER truncated. Their FK links to
               ephemeral/seed rows (run_id, step_id, related_*) are nulled first
               so the truncate is legal and no lesson is left pointing at a row
@@ -66,30 +71,35 @@ SEED_TABLES: tuple[str, ...] = (
     "term_meal_preferences",
     "term_meal_preference_items",
     "meal_requests",
+    # Captured operational state — moved here from EPHEMERAL so a reset RESTORES
+    # it. ORDER MATTERS (FK parents first): orders before order_lines (and before
+    # feedback, which may reference them); agent_runs before outbound_emails
+    # before caterer_week_orders (run_id / summary_email_id chain).
+    "orders",
+    "order_lines",
     "checklist_item",
     "feedback",
     "feedback_checklist_response",
     "student_eligible_meals",
     "opt_back_in_requests",
+    "agent_runs",
+    "outbound_emails",
+    "caterer_week_orders",
 )
 
-# Agent-run artifacts: truncated to empty, never seeded — the agent recreates
-# them. order_lines/orders listed children-first for readability (the single
-# multi-table TRUNCATE is order-independent).
+# Agent-run artifacts that stay transient: truncated to empty, never seeded — the
+# agent recreates them. The single multi-table TRUNCATE is order-independent, but
+# every referencer of a truncated table must be in the TRUNCATE set (no CASCADE);
+# the combined `targets` set below guarantees that. Nothing in SEED points at
+# these with a non-null FK (outbound_emails.related_step_id is unset; the
+# decision_annotations / cases FK links into them are nulled by PRESERVE), so
+# leaving them empty is FK-safe.
 EPHEMERAL_TABLES: tuple[str, ...] = (
-    "order_lines",
-    "orders",
-    "caterer_week_orders",
-    # Citation logs reference runs/steps (and cases/policies); they are run
-    # artifacts, wiped with the runs. Listed before agent_steps/agent_runs so the
-    # TRUNCATE set stays FK-complete (every referencer is included — no CASCADE).
     "step_lesson_citations",
     "step_policy_citations",
     "agent_steps",
     "escalations",
-    "outbound_emails",
     "inbound_email_records",
-    "agent_runs",
 )
 
 # Content preserved across a reset (the training lessons). Postgres won't let us
@@ -268,14 +278,17 @@ def _report() -> None:
         ("enrolments", "SELECT count(*) FROM enrolments"),
         ("student_eligible_meals", "SELECT count(*) FROM student_eligible_meals"),
         ("feedback", "SELECT count(*) FROM feedback"),
-        ("orders (cleared)", "SELECT count(*) FROM orders"),
-        ("caterer_week_orders (cleared)", "SELECT count(*) FROM caterer_week_orders"),
-        ("agent_runs (cleared)", "SELECT count(*) FROM agent_runs"),
+        ("orders (restored)", "SELECT count(*) FROM orders"),
+        ("order_lines (restored)", "SELECT count(*) FROM order_lines"),
+        ("caterer_week_orders (restored)", "SELECT count(*) FROM caterer_week_orders"),
+        ("agent_runs (restored)", "SELECT count(*) FROM agent_runs"),
+        ("outbound_emails (restored)", "SELECT count(*) FROM outbound_emails"),
+        ("agent_steps (cleared)", "SELECT count(*) FROM agent_steps"),
         ("cases (preserved)", "SELECT count(*) FROM cases"),
         ("decision_annotations (preserved)", "SELECT count(*) FROM decision_annotations"),
         ("policies (preserved)", "SELECT count(*) FROM policies"),
     ]
-    print("Demo reset complete. Clean seed reloaded; training lessons preserved.\n")
+    print("Demo reset complete. Seed reloaded (orders restored); training lessons preserved.\n")
     with get_conn() as conn, conn.cursor() as cur:
         width = max(len(label) for label, _ in checks)
         for label, q in checks:
