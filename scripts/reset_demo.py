@@ -13,13 +13,13 @@ Three groups are managed:
 
   SEED      — business inputs + the derived dietary pool + historical feedback +
               the captured operational state (orders, order_lines, the weekly
-              caterer summaries, the agent_runs that produced them, and their
-              outbound emails). Truncated and re-inserted verbatim from
-              database/seed/seed.sql, so a reset RESTORES that state rather than
-              clearing it. Re-capture with --capture to re-baseline to NOW.
-  EPHEMERAL — the remaining agent-run artifacts (agent_steps, escalations,
-              inbound records, citation logs). Truncated to empty; the agent
-              regenerates them.
+              caterer summaries, the agent_runs that produced them, their
+              agent_steps + citation rows — i.e. the full decision-feed / audit
+              trail — and their outbound emails). Truncated and re-inserted
+              verbatim from database/seed/seed.sql, so a reset RESTORES that state
+              rather than clearing it. Re-capture with --capture to re-baseline.
+  EPHEMERAL — the remaining agent-run artifacts (escalations, inbound records).
+              Truncated to empty; the agent regenerates them.
   PRESERVE  — cases + decision_annotations. NEVER truncated. Their FK links to
               ephemeral/seed rows (run_id, step_id, related_*) are nulled first
               so the truncate is legal and no lesson is left pointing at a row
@@ -45,6 +45,7 @@ from pathlib import Path
 
 import psycopg
 from psycopg import sql
+from psycopg.types.json import Json
 
 from config.settings import PROJECT_ROOT
 from src.db.connection import get_conn
@@ -83,21 +84,27 @@ SEED_TABLES: tuple[str, ...] = (
     "student_eligible_meals",
     "opt_back_in_requests",
     "agent_runs",
+    "agent_steps",
     "outbound_emails",
     "caterer_week_orders",
+    # Citation link rows complete the baseline run's decision-feed / audit trail.
+    # They reference agent_runs + agent_steps (both seeded just above). NOTE the
+    # cross-FK to the PRESERVE tables: step_lesson_citations.case_id -> cases is
+    # only FK-safe while EMPTY, because cases are truncated and re-inserted AFTER
+    # seed.sql runs (see _restore_preserved) — a seeded lesson citation would
+    # point at a case that does not yet exist at seed-load time. policies persist
+    # untouched, so step_policy_citations is safe whenever its policies exist.
+    "step_lesson_citations",
+    "step_policy_citations",
 )
 
 # Agent-run artifacts that stay transient: truncated to empty, never seeded — the
 # agent recreates them. The single multi-table TRUNCATE is order-independent, but
 # every referencer of a truncated table must be in the TRUNCATE set (no CASCADE);
 # the combined `targets` set below guarantees that. Nothing in SEED points at
-# these with a non-null FK (outbound_emails.related_step_id is unset; the
-# decision_annotations / cases FK links into them are nulled by PRESERVE), so
-# leaving them empty is FK-safe.
+# these with a non-null FK (the decision_annotations FK links into agent_steps /
+# agent_runs are nulled by PRESERVE), so leaving them empty is FK-safe.
 EPHEMERAL_TABLES: tuple[str, ...] = (
-    "step_lesson_citations",
-    "step_policy_citations",
-    "agent_steps",
     "escalations",
     "inbound_email_records",
 )
@@ -132,6 +139,16 @@ def _columns(cur: psycopg.Cursor, table: str) -> list[str]:
     return [r[0] for r in cur.fetchall()]
 
 
+def _lit(value):
+    """Make a fetched value safe for sql.Literal.
+
+    psycopg returns jsonb columns as Python dict/list, which sql.Literal cannot
+    adapt directly. Wrap those in Json so they serialise to a quoted ``::jsonb``
+    literal; every other value passes through unchanged.
+    """
+    return Json(value) if isinstance(value, (dict, list)) else value
+
+
 def capture() -> int:
     """Write database/seed/seed.sql from the current seed-table contents."""
     SEED_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -153,7 +170,7 @@ def capture() -> int:
             for start in range(0, len(rows), _BATCH):
                 chunk = rows[start:start + _BATCH]
                 values = ",\n".join(
-                    "(" + ", ".join(sql.Literal(v).as_string(conn) for v in row) + ")"
+                    "(" + ", ".join(sql.Literal(_lit(v)).as_string(conn) for v in row) + ")"
                     for row in chunk
                 )
                 fh.write(f"INSERT INTO {table} ({collist}) VALUES\n{values};\n")
@@ -283,7 +300,9 @@ def _report() -> None:
         ("caterer_week_orders (restored)", "SELECT count(*) FROM caterer_week_orders"),
         ("agent_runs (restored)", "SELECT count(*) FROM agent_runs"),
         ("outbound_emails (restored)", "SELECT count(*) FROM outbound_emails"),
-        ("agent_steps (cleared)", "SELECT count(*) FROM agent_steps"),
+        ("agent_steps (restored)", "SELECT count(*) FROM agent_steps"),
+        ("step_lesson_citations (restored)", "SELECT count(*) FROM step_lesson_citations"),
+        ("step_policy_citations (restored)", "SELECT count(*) FROM step_policy_citations"),
         ("cases (preserved)", "SELECT count(*) FROM cases"),
         ("decision_annotations (preserved)", "SELECT count(*) FROM decision_annotations"),
         ("policies (preserved)", "SELECT count(*) FROM policies"),
