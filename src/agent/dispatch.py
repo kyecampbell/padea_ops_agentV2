@@ -221,7 +221,9 @@ def _get_student_choice_options_tool(enrolment_id: int) -> ToolResult:
     being chosen for, and the meal they had last week (the one to rate). Read-only;
     the agent uses the numbers to map a reply's pick to a menu_item_id.
     """
-    opts = student_choice.build_choice_options(enrolment_id, student_choice.upcoming_week())
+    opts = student_choice.build_choice_options(
+        enrolment_id, student_choice.default_reply_week(enrolment_id)
+    )
     if isinstance(opts, ToolResult):
         return opts
     # A clean, typed signal rather than an error when there are no options: this

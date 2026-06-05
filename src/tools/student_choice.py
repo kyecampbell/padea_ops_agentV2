@@ -174,6 +174,31 @@ def upcoming_week(today: date | None = None) -> date:
     return orders_batch.upcoming_monday(today or date.today())
 
 
+def _latest_choice_week(enrolment_id: int) -> date | None:
+    """The target week of the student's most recent non-failed choice email, parsed
+    from its reference token. ``None`` if they have no choice email on record."""
+    rows = _read(
+        f"finding latest choice email for enrolment {enrolment_id}",
+        """
+        SELECT subject FROM outbound_emails
+        WHERE related_enrolment_id = %s AND email_type = %s AND status = ANY(%s)
+        ORDER BY composed_at DESC, id DESC LIMIT 1
+        """,
+        (enrolment_id, CHOICE_EMAIL_TYPE, list(_ACTIVE_EMAIL_STATES)),
+    )
+    if _failed(rows) or not rows:
+        return None
+    ref = parse_reply_reference(rows[0]["subject"], "")
+    return ref[1] if ref else None
+
+
+def default_reply_week(enrolment_id: int) -> date:
+    """The week a student's REPLY concerns: the target week of the choice email we
+    most recently sent them (so a reply always answers the right week, even off the
+    normal cadence), falling back to the upcoming week if they have none on record."""
+    return _latest_choice_week(enrolment_id) or upcoming_week()
+
+
 def _enrolment_row(enrolment_id: int) -> dict | None | ToolResult:
     rows = _read(
         f"loading enrolment {enrolment_id} for choice",
@@ -753,9 +778,10 @@ def record_meal_choice(
     Validates the pick is in the student's safe, offered options (rejects with a
     ``conflict`` otherwise — never assigns an ineligible meal). Idempotent per
     (enrolment, slot, date): a re-pick supersedes the prior one. ``compose_week``
-    then prefers this pick over the fallback. A DATA change, not a send.
-    """
-    week_of = orders_batch.monday_of_week(week_of or upcoming_week())
+    then prefers this pick over the fallback. A DATA change, not a send. When
+    ``week_of`` is omitted it defaults to the week the student's latest choice email
+    was for (so a reply answers the right week)."""
+    week_of = orders_batch.monday_of_week(week_of or default_reply_week(enrolment_id))
     plan_row = plan_meal_choice(enrolment_id, menu_item_id, week_of)
     if _failed(plan_row):
         return plan_row
@@ -845,9 +871,10 @@ def record_meal_rating(
 
     Feeds the same caterer quality signal as tutor/manager feedback
     (``get_caterer_feedback``). A benign, reversible fact — no send. The agent calls
-    this after parsing the reply.
-    """
-    week_of = orders_batch.monday_of_week(week_of or upcoming_week())
+    this after parsing the reply. When ``week_of`` is omitted it defaults to the
+    week the student's latest choice email was for (so the rating lands on the meal
+    they were asked to rate)."""
+    week_of = orders_batch.monday_of_week(week_of or default_reply_week(enrolment_id))
     row = plan_meal_rating(enrolment_id, rating, comment, week_of)
     if _failed(row):
         return row
