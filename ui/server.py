@@ -26,14 +26,24 @@ Run: uv run python ui/server.py   (then open http://127.0.0.1:5000)
 
 from __future__ import annotations
 
+import os
 from datetime import date, timedelta
 from typing import Any, Sequence
 
 import psycopg
-from flask import Flask, flash, redirect, render_template, request, url_for
+from flask import (
+    Flask,
+    flash,
+    redirect,
+    render_template,
+    request,
+    session,
+    url_for,
+)
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
+from config.settings import settings
 from src.agent.dispatch import dispatch
 from src.db.connection import get_conn
 from src.tools import casebook
@@ -44,8 +54,75 @@ from src.tools.casebook import store_case
 from src.tools.eligible_pool import recompute_eligible_meals
 
 app = Flask(__name__)
-# Local-only dev secret — flash messaging only; never deployed publicly as-is.
-app.secret_key = "padea-cockpit-local-dev"
+# Session secret from env (COCKPIT_SECRET_KEY). Falls back to a random per-process
+# value when unset — fine for local dev (sessions just don't survive a restart);
+# set it in prod so logins persist across restarts and across web workers.
+app.secret_key = settings.cockpit_secret_key or os.urandom(32).hex()
+
+
+# --- Cockpit login (two fixed accounts, passwords from env) ------------------
+# Minimal session auth — no user DB, no framework. Every route is gated by the
+# before_request hook below; only the login page and static assets are public.
+
+
+def _account_passwords() -> dict[str, str]:
+    """The {username: password} map, from env. An account with no password set is
+    omitted entirely (it can never log in), so a missing secret fails closed."""
+    configured = {
+        "kye": settings.cockpit_password_kye,
+        "dylan": settings.cockpit_password_dylan,
+    }
+    return {user: pw for user, pw in configured.items() if pw}
+
+
+# Endpoints reachable WITHOUT a session. Everything else requires login.
+_PUBLIC_ENDPOINTS = {"login", "static"}
+
+
+@app.before_request
+def _require_login():
+    """Gate every request behind a session login (except the public endpoints).
+
+    This is the single choke point: it covers the read feed AND every mutating
+    action endpoint (approve-and-send, apply-write, resolve, recompute, comment),
+    so no unauthenticated request can read data or trigger a send."""
+    if request.endpoint in _PUBLIC_ENDPOINTS:
+        return None
+    if session.get("user"):
+        return None
+    return redirect(url_for("login", next=request.path))
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if session.get("user"):
+        return redirect(url_for("index"))
+    if request.method == "POST":
+        username = (request.form.get("username") or "").strip().lower()
+        password = request.form.get("password") or ""
+        accounts = _account_passwords()
+        if username in accounts and password == accounts[username]:
+            session["user"] = username
+            target = request.args.get("next") or url_for("index")
+            # Only allow internal redirects (no open-redirect via ?next=).
+            if not target.startswith("/"):
+                target = url_for("index")
+            return redirect(target)
+        flash("Invalid username or password.", "error")
+    return render_template("login.html")
+
+
+@app.route("/logout", methods=["POST"])
+def logout():
+    session.clear()
+    flash("Signed out.", "success")
+    return redirect(url_for("login"))
+
+
+@app.context_processor
+def _inject_user() -> dict[str, Any]:
+    """Expose the logged-in user to all templates (for the header / logout)."""
+    return {"current_user": session.get("user")}
 
 # How many recent runs the feed shows.
 _FEED_LIMIT = 25
@@ -262,6 +339,7 @@ def index() -> str:
     return render_template(
         "index.html",
         active_tab="feed",
+        auto_refresh=True,
         runs=runs,
         steps=steps,
         citations=citations,
@@ -835,5 +913,10 @@ def _harvest_related_ids(tool_input: Any, related: dict) -> None:
 
 
 if __name__ == "__main__":
-    # Local cockpit only — bind to loopback, never 0.0.0.0.
-    app.run(host="127.0.0.1", port=5000, debug=True)
+    # Local dev entry point only — `uv run python ui/server.py`. In production the
+    # app is served by gunicorn (see render.yaml), which imports `ui.server:app`
+    # and never runs this block, so debug stays OFF in the cloud.
+    #
+    # Binds loopback by default; debug follows FLASK_DEBUG (off unless you opt in).
+    debug = os.environ.get("FLASK_DEBUG", "").lower() in ("1", "true", "yes")
+    app.run(host="127.0.0.1", port=5000, debug=debug)

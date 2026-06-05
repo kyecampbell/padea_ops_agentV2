@@ -110,8 +110,17 @@
 </head>
 <body>
 <header>
-  <h1>Padea — Operator Cockpit</h1>
-  <div class="sub">Read-only cockpit + the learning loop. Local only (127.0.0.1).</div>
+  <div class="row">
+    <h1>Padea — Operator Cockpit</h1>
+    <div class="spacer"></div>
+    {% if current_user %}
+      <span class="muted" style="font-size:12px;">signed in as <b>{{ current_user }}</b></span>
+      <form class="inline" method="post" action="{{ url_for('logout') }}">
+        <button class="ghost" style="padding:4px 10px;font-size:12px;">Sign out</button>
+      </form>
+    {% endif %}
+  </div>
+  <div class="sub">Read-only cockpit + the learning loop.</div>
   <nav class="tabs">
     <a href="{{ url_for('index') }}"    class="{{ 'active' if active_tab == 'feed' }}">Decision feed</a>
     <a href="{{ url_for('orders') }}"   class="{{ 'active' if active_tab == 'orders' }}">Weekly Orders</a>
@@ -133,5 +142,28 @@
   {% block content %}{% endblock %}
 
 </main>
+{% if auto_refresh %}
+<script>
+  // Nice-to-have: live feed without a manual reload. Reload every ~25s, but SKIP
+  // the reload while the operator is interacting — a focused field, any text
+  // typed into a textarea, or an open <details> — so a half-written comment or
+  // an expanded panel is never wiped out from under them.
+  (function () {
+    const INTERVAL_MS = 25000;
+    function busy() {
+      const el = document.activeElement;
+      if (el && ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName)) return true;
+      for (const ta of document.querySelectorAll('textarea')) {
+        if (ta.value.trim()) return true;
+      }
+      for (const d of document.querySelectorAll('details[open]')) {
+        if (d) return true;
+      }
+      return false;
+    }
+    setInterval(function () { if (!busy()) location.reload(); }, INTERVAL_MS);
+  })();
+</script>
+{% endif %}
 </body>
 </html>

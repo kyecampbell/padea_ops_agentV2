@@ -11,6 +11,9 @@ dependencies = [
     "python-dotenv",
     "pyyaml",
     "Flask",
+    "gunicorn",
+    "apscheduler>=3.10,<4",
+    "tzdata",
     "google-api-python-client>=2.197.0",
     "google-auth>=2.53.0",
 ]

@@ -12,6 +12,26 @@ per_incident_call_cap: 8
 # Inbound email polling interval, in seconds.
 poll_interval_seconds: 300
 
+# --- Worker schedule (the 24/7 background worker; see worker.py) -------------
+# The two weekly incidents fire on cron triggers in this timezone. Brisbane has
+# no daylight saving, so these wall-clock times are stable year-round. Any of
+# these may also be overridden by an env var of the same (upper-cased) name.
+scheduler_timezone: Australia/Brisbane
+
+# Thursday order run — composes + sends every caterer's week order.
+thursday_batch_day: thu
+thursday_batch_hour: 9
+thursday_batch_minute: 0
+
+# Weekly quality review — reviews caterer service quality, alongside the batch.
+quality_review_day: mon
+quality_review_hour: 8
+quality_review_minute: 0
+
+# How late a missed fire may still run (seconds) before it's dropped as a misfire.
+# Covers a long-running job or a brief worker restart without double-firing.
+misfire_grace_seconds: 3600
+
 # Casebook recall: how many similar past cases to retrieve for context.
 recall_case_limit: 5
 

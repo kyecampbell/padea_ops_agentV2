@@ -1,0 +1,60 @@
+# Render blueprint — Padea Operations Agent.
+#
+# Two services share one secret group:
+#   - web:    the Flask operator cockpit, served by gunicorn (binds $PORT).
+#   - worker: the 24/7 background process (inbox poll loop + weekly scheduler).
+#
+# Secrets are set ONCE in the env group below (sync:false = entered in the Render
+# dashboard, never committed). EMAIL_MODE stays "demo" so outbound mail is always
+# redirected to DEMO_SINK_EMAIL — flip to "live" only deliberately, in the dashboard.
+
+services:
+  - type: web
+    name: padea-cockpit
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    # Gunicorn imports the Flask app object `app` from the `ui.server` module and
+    # binds Render's injected $PORT. debug is off (this never runs server.py's
+    # __main__ block).
+    startCommand: gunicorn -b 0.0.0.0:$PORT ui.server:app
+    envVars:
+      - fromGroup: padea-secrets
+
+  - type: worker
+    name: padea-worker
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: python worker.py
+    envVars:
+      - fromGroup: padea-secrets
+
+envVarGroups:
+  - name: padea-secrets
+    envVars:
+      # --- Secrets — set in the Render dashboard (never committed). ---
+      - key: DATABASE_URL
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: GMAIL_CREDENTIALS_JSON
+        sync: false
+      - key: GMAIL_TOKEN_JSON
+        sync: false
+      - key: COCKPIT_SECRET_KEY
+        sync: false
+      - key: COCKPIT_PASSWORD_KYE
+        sync: false
+      - key: COCKPIT_PASSWORD_DYLAN
+        sync: false
+      # --- Literal, non-secret config. ---
+      # Demo mode: outbound sends are redirected to the sink. Keep this as "demo"
+      # in production; the caterer addresses are .example placeholders.
+      - key: EMAIL_MODE
+        value: demo
+      - key: DEMO_SINK_EMAIL
+        value: padea.demo@outlook.com
+      # Pin the Python runtime for both services.
+      - key: PYTHON_VERSION
+        value: "3.12.13"
