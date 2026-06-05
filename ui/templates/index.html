@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+{% block content %}
+
+  {% if offer_recompute %}
+    <div class="panel">
+      <div class="row">
+        <strong>Dietary follow-up</strong>
+        <span class="muted">Recompute the dietary-safe meal pool for enrolment {{ offer_recompute }}?</span>
+        <span class="spacer"></span>
+        <form class="inline" method="post" action="{{ url_for('recompute_route', enrolment_id=offer_recompute) }}">
+          <button type="submit">Recompute eligible meals</button>
+        </form>
+      </div>
+    </div>
+  {% endif %}
+
+  <!-- ============================ NEEDS ATTENTION ======================== -->
+  <h2>Needs attention</h2>
+
+  {% if not queued_emails and not pending_writes and not open_escalations %}
+    <div class="empty">Nothing waiting on the operator. 🎉</div>
+  {% endif %}
+
+  {% if queued_emails %}
+    <div class="panel">
+      <strong>Queued emails <span class="badge mail">{{ queued_emails|length }}</span></strong>
+      {% for e in queued_emails %}
+        <div class="step">
+          <div class="row">
+            <span class="pill requires_approval">{{ e.email_type }}</span>
+            <span class="mono">→ {{ e.intended_to_address }}</span>
+            <span class="muted">{{ e.subject }}</span>
+            {% if e.related_run_id %}<span class="muted">· run {{ e.related_run_id }}</span>{% endif %}
+            <span class="spacer"></span>
+            <form class="inline" method="post" action="{{ url_for('approve_email', email_id=e.id) }}">
+              <button type="submit">Approve &amp; send</button>
+            </form>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  {% if pending_writes %}
+    <div class="panel">
+      <strong>Proposed writes (not applied) <span class="badge write">{{ pending_writes|length }}</span></strong>
+      {% for w in pending_writes %}
+        <div class="step">
+          <div class="row">
+            <span class="pill requires_approval">{{ w.tool_name }}</span>
+            <span class="mono">{{ w.tool_input|tojson }}</span>
+            {% if w.run_id %}<span class="muted">· run {{ w.run_id }} / step {{ w.step_index }}</span>{% endif %}
+            <span class="spacer"></span>
+            <form class="inline" method="post" action="{{ url_for('apply_write', step_id=w.id) }}">
+              <button type="submit">Approve &amp; apply</button>
+            </form>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  {% if open_escalations %}
+    <div class="panel">
+      <strong>Open escalations <span class="badge esc">{{ open_escalations|length }}</span></strong>
+      {% for esc in open_escalations %}
+        <div class="step">
+          <div class="row">
+            <span class="mono">#{{ esc.id }}</span>
+            <span>{{ esc.question }}</span>
+            {% if esc.related_enrolment_id %}<span class="muted">· enrolment {{ esc.related_enrolment_id }}</span>{% endif %}
+            {% if esc.run_id %}<span class="muted">· run {{ esc.run_id }}</span>{% endif %}
+          </div>
+          <form method="post" action="{{ url_for('resolve_escalation_route', escalation_id=esc.id) }}">
+            <div class="field"><textarea name="resolution" placeholder="Resolution note…" required></textarea></div>
+            <div class="row">
+              <input class="author" type="text" name="author" placeholder="your name" value="operator">
+              <button type="submit">Resolve</button>
+            </div>
+          </form>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  <!-- ============================ DECISION FEED ========================== -->
+  <h2>Decision feed</h2>
+
+  {% if not runs %}
+    <div class="empty">No agent runs yet.</div>
+  {% endif %}
+
+  {% for run in runs %}
+    <div class="panel">
+      <div class="row">
+        <strong>Run {{ run.id }}</strong>
+        <span class="mono muted">{{ run.trigger_reason }}</span>
+        <span class="muted">{{ run.started_at.strftime('%Y-%m-%d %H:%M') if run.started_at else '' }}</span>
+        {% if badges.escalations.get(run.id) %}<span class="badge esc">{{ badges.escalations[run.id] }} escalation(s)</span>{% endif %}
+        {% if badges.emails.get(run.id) %}<span class="badge mail">{{ badges.emails[run.id] }} queued email(s)</span>{% endif %}
+        {% if badges.writes.get(run.id) %}<span class="badge write">{{ badges.writes[run.id] }} pending write(s)</span>{% endif %}
+        <span class="spacer"></span>
+        <span class="muted">{{ 'open' if not run.completed_at else 'done' }}</span>
+      </div>
+
+      {% set run_steps = steps.get(run.id, []) %}
+      {% if run_steps %}
+        <div style="margin-top:8px">
+          {% for s in run_steps %}
+            <div class="step">
+              <div class="row">
+                <span class="mono">{{ s.step_index }}.</span>
+                <span class="mono">{{ s.tool_name }}</span>
+                <span class="pill {{ s.action_class }}">{{ s.action_class or '—' }}</span>
+                <span>→ <span class="status-{{ s.status }}">{{ s.status or '—' }}</span></span>
+                {% if s.applied == 'true' %}<span class="muted">· applied</span>{% endif %}
+              </div>
+              {% if s.reasoning %}<div class="reason">{{ s.reasoning[:280] }}{% if s.reasoning|length > 280 %}…{% endif %}</div>{% endif %}
+              <details>
+                <summary>comment on this step</summary>
+                <form method="post" action="{{ url_for('comment') }}">
+                  <input type="hidden" name="step_id" value="{{ s.id }}">
+                  <input type="hidden" name="run_id" value="{{ run.id }}">
+                  <div class="field"><textarea name="comment" placeholder="Operator note — trains the case-book…" required></textarea></div>
+                  <div class="row">
+                    <input class="author" type="text" name="author" value="operator">
+                    <button type="submit">Comment &amp; teach</button>
+                  </div>
+                </form>
+              </details>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="empty">No tool steps logged.</div>
+      {% endif %}
+
+      <div style="margin-top:10px">
+        <span class="muted">Final decision:</span>
+        {% if run.notes %}{{ run.notes }}{% else %}<span class="muted">—</span>{% endif %}
+      </div>
+
+      {% set run_citations = citations.get(run.id, []) %}
+      {% if run_citations %}
+        <details class="cite">
+          <summary><span class="infoicon">ⓘ</span> Referenced {{ run_citations|length }} lesson{{ 's' if run_citations|length != 1 }}</summary>
+          <div class="cite-body">
+            {% for cit in run_citations %}
+              <div class="cite-row">
+                <a href="{{ url_for('lessons') }}#lesson-{{ cit.case_id }}">Lesson #{{ cit.case_id }}</a>
+                {% if not cit.active %}<span class="pill off">disabled</span>{% endif %}
+                {% if cit.reason %}<span class="muted">— {{ cit.reason }}</span>{% endif %}
+                <span class="muted cite-where">
+                  {% if cit.step_index is not none %}cited at step {{ cit.step_index }}{% else %}cited in final answer{% endif %}
+                </span>
+              </div>
+            {% endfor %}
+          </div>
+        </details>
+      {% endif %}
+
+      {% set run_policy_citations = policy_citations.get(run.id, []) %}
+      {% if run_policy_citations %}
+        <details class="cite">
+          <summary><span class="infoicon">ⓘ</span> Applied {{ run_policy_citations|length }} polic{{ 'ies' if run_policy_citations|length != 1 else 'y' }}</summary>
+          <div class="cite-body">
+            {% for cit in run_policy_citations %}
+              <div class="cite-row">
+                <a href="{{ url_for('policies') }}#policy-{{ cit.policy_id }}">Policy #{{ cit.policy_id }}</a>
+                {% if not cit.active %}<span class="pill off">disabled</span>{% endif %}
+                {% if cit.reason %}<span class="muted">— {{ cit.reason }}</span>{% endif %}
+                <span class="muted cite-where">
+                  {% if cit.step_index is not none %}cited at step {{ cit.step_index }}{% else %}cited in final answer{% endif %}
+                </span>
+              </div>
+            {% endfor %}
+          </div>
+        </details>
+      {% endif %}
+
+      <details>
+        <summary>comment on this run</summary>
+        <form method="post" action="{{ url_for('comment') }}">
+          <input type="hidden" name="run_id" value="{{ run.id }}">
+          <div class="field"><textarea name="comment" placeholder="Operator note — trains the case-book…" required></textarea></div>
+          <div class="row">
+            <input class="author" type="text" name="author" value="operator">
+            <button type="submit">Comment &amp; teach</button>
+          </div>
+        </form>
+      </details>
+    </div>
+  {% endfor %}
+
+{% endblock %}

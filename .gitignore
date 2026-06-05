@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+
+# Build artifacts
+*.egg-info/
+
+# Secrets / credentials
+.env
+.env.*
+!.env.example
+*.token.json
+config/gmail_*.json
+
+# Local data
+chat_history/transcripts/
+
+# Raw source data — contains real-domain names/emails (PII); never commit.
+database/source_data/
+
+# OS
+.DS_Store

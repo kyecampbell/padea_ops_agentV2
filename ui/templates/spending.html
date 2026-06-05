@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block content %}
+
+  <h2>Spending</h2>
+
+  {% if not weeks %}
+    <div class="empty">No composed orders yet — nothing to total.</div>
+  {% else %}
+    <div class="panel">
+      <div class="row">
+        <span class="muted">Per-caterer weekly cost across the last {{ weeks|length }} week(s).</span>
+        <span class="spacer"></span>
+        <strong>Term total: {{ grand_total | cents }}</strong>
+      </div>
+
+      <table style="margin-top:10px">
+        <thead>
+          <tr>
+            <th>Caterer</th>
+            {% for w in weeks %}<th class="num">{{ w.strftime('%d %b') }}</th>{% endfor %}
+            <th class="num">Term total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in caterers %}
+            <tr>
+              <td>{{ c.caterer_name }}</td>
+              {% for w in weeks %}
+                {% set cell = c.by_week.get(w) %}
+                <td class="num">
+                  {% if cell %}
+                    {{ cell.cost_cents | cents }}
+                    <span class="barwrap">
+                      <span class="bar" style="width: {{ (cell.cost_cents * 80 // max_cell) if max_cell else 0 }}px"
+                            title="{{ cell.items }} meals"></span>
+                    </span>
+                  {% else %}
+                    <span class="muted">—</span>
+                  {% endif %}
+                </td>
+              {% endfor %}
+              <td class="num"><strong>{{ c.term_total_cents | cents }}</strong></td>
+            </tr>
+          {% endfor %}
+          <tr class="total">
+            <td>All caterers</td>
+            {% for w in weeks %}<td class="num">{{ week_totals.get(w, 0) | cents }}</td>{% endfor %}
+            <td class="num">{{ grand_total | cents }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+
+{% endblock %}

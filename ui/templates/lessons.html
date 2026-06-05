@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block content %}
+
+  <h2>Manage Lessons</h2>
+  <div class="muted" style="margin-bottom:12px">
+    Every case in the case-book. Editing changes what the agent recalls immediately.
+    <em>Disable</em> hides a lesson from recall but keeps it (reversible); <em>delete</em> is permanent.
+  </div>
+
+  {% if not cases %}
+    <div class="empty">No lessons yet. They are created from operator comments on the decision feed.</div>
+  {% endif %}
+
+  {% for c in cases %}
+    <div class="panel {{ '' if c.active else 'inactive' }}" id="lesson-{{ c.id }}">
+      <div class="row">
+        <strong>Lesson {{ c.id }}</strong>
+        {% if c.active %}
+          <span class="badge ok">active</span>
+        {% else %}
+          <span class="pill off">disabled</span>
+        {% endif %}
+        <span class="muted">{{ c.created_at.strftime('%Y-%m-%d %H:%M') if c.created_at else '' }}</span>
+        {% if c.created_by %}<span class="muted">· {{ c.created_by }}</span>{% endif %}
+        <span class="spacer"></span>
+        <form class="inline" method="post" action="{{ url_for('toggle_lesson', case_id=c.id) }}">
+          <input type="hidden" name="active" value="{{ 'false' if c.active else 'true' }}">
+          <button type="submit" class="ghost">{{ 'Disable' if c.active else 'Enable' }}</button>
+        </form>
+        <form class="inline" method="post" action="{{ url_for('delete_lesson', case_id=c.id) }}"
+              onsubmit="return confirm('Permanently delete lesson {{ c.id }}? This cannot be undone.');">
+          <button type="submit" class="danger">Delete</button>
+        </form>
+      </div>
+
+      <div style="margin-top:8px">
+        <div><span class="muted">Situation:</span> {{ c.situation }}</div>
+        {% if c.decision %}<div><span class="muted">Decision:</span> {{ c.decision }}</div>{% endif %}
+        {% if c.rationale %}<div><span class="muted">Rationale:</span> {{ c.rationale }}</div>{% endif %}
+        {% if c.tags %}
+          <div class="tags" style="margin-top:4px">
+            {% for t in c.tags %}<span class="tag">{{ t }}</span>{% endfor %}
+          </div>
+        {% endif %}
+      </div>
+
+      <details>
+        <summary>edit wording</summary>
+        <form method="post" action="{{ url_for('edit_lesson', case_id=c.id) }}">
+          <div class="field">
+            <label>Situation (required)</label>
+            <textarea name="situation" required>{{ c.situation }}</textarea>
+          </div>
+          <div class="field">
+            <label>Decision / guidance</label>
+            <textarea name="decision">{{ c.decision or '' }}</textarea>
+          </div>
+          <div class="field">
+            <label>Rationale</label>
+            <textarea name="rationale">{{ c.rationale or '' }}</textarea>
+          </div>
+          <div class="field">
+            <label>Tags (comma-separated)</label>
+            <input type="text" name="tags" value="{{ c.tags | join(', ') if c.tags else '' }}">
+          </div>
+          <button type="submit">Save edits</button>
+        </form>
+      </details>
+    </div>
+  {% endfor %}
+
+{% endblock %}

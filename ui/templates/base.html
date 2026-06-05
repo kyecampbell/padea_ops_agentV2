@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Padea — Operator Cockpit</title>
+  <style>
+    :root {
+      --bg: #0f1115; --panel: #181b22; --panel2: #1f232c; --line: #2a2f3a;
+      --ink: #e8eaed; --dim: #9aa3b2; --accent: #5b8cff;
+      --ok: #3ecf8e; --warn: #f5a623; --bad: #ff6b6b;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--ink);
+      font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    header {
+      padding: 16px 24px 0; border-bottom: 1px solid var(--line);
+      background: var(--panel); position: sticky; top: 0; z-index: 5;
+    }
+    header h1 { margin: 0; font-size: 18px; }
+    header .sub { color: var(--dim); font-size: 12px; }
+    nav.tabs { display: flex; gap: 4px; margin-top: 12px; }
+    nav.tabs a {
+      padding: 8px 14px; color: var(--dim); font-weight: 600; font-size: 13px;
+      border: 1px solid transparent; border-bottom: 0;
+      border-radius: 8px 8px 0 0;
+    }
+    nav.tabs a:hover { color: var(--ink); }
+    nav.tabs a.active {
+      color: var(--ink); background: var(--bg);
+      border-color: var(--line); margin-bottom: -1px;
+    }
+    main { max-width: 1000px; margin: 0 auto; padding: 20px 24px 80px; }
+    h2 { font-size: 15px; margin: 28px 0 12px; color: var(--ink);
+         border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+    .panel { background: var(--panel); border: 1px solid var(--line);
+             border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; }
+    .muted { color: var(--dim); }
+    .row { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+    .spacer { flex: 1; }
+    code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
+    .pill { display: inline-block; padding: 1px 8px; border-radius: 999px;
+            font-size: 11px; font-weight: 600; border: 1px solid var(--line); }
+    .pill.autonomous { color: var(--ok); border-color: #1f5f44; }
+    .pill.requires_approval { color: var(--warn); border-color: #6b531a; }
+    .pill.off { color: var(--dim); }
+    .badge { display: inline-block; padding: 1px 8px; border-radius: 999px;
+             font-size: 11px; font-weight: 700; margin-left: 6px; }
+    .badge.esc { background: #4a1f1f; color: #ffb3b3; }
+    .badge.mail { background: #1f2f4a; color: #b3ccff; }
+    .badge.write { background: #4a3a1f; color: #ffd699; }
+    .badge.ok { background: #11281f; color: #b6f0d4; }
+    .badge.warn { background: #4a3a1f; color: #ffd699; }
+    .status-found { color: var(--ok); } .status-queued { color: var(--warn); }
+    .status-empty, .status-conflict, .status-error, .status-unavailable,
+    .status-ambiguous { color: var(--bad); }
+    .step { padding: 6px 0; border-top: 1px dashed var(--line); }
+    .step:first-child { border-top: 0; }
+    .flash { padding: 10px 14px; border-radius: 8px; margin-bottom: 8px; border: 1px solid var(--line); }
+    .flash.success { background: #11281f; border-color: #1f5f44; color: #b6f0d4; }
+    .flash.error   { background: #2a1414; border-color: #5f1f1f; color: #ffc0c0; }
+    .flash.recompute { background: #2a2410; border-color: #6b531a; color: #ffe0a3; }
+    form.inline { display: inline; }
+    input[type=text], textarea, select {
+      background: var(--panel2); border: 1px solid var(--line); color: var(--ink);
+      border-radius: 6px; padding: 6px 8px; font: inherit; width: 100%;
+    }
+    select { width: auto; }
+    textarea { min-height: 52px; resize: vertical; }
+    .field { margin: 6px 0; }
+    .field label { display: block; color: var(--dim); font-size: 12px; margin-bottom: 2px; }
+    .author { max-width: 180px; }
+    button {
+      background: var(--accent); color: #fff; border: 0; border-radius: 6px;
+      padding: 6px 12px; font: inherit; font-weight: 600; cursor: pointer;
+    }
+    button.ghost { background: transparent; border: 1px solid var(--line); color: var(--ink); }
+    button.warn { background: var(--warn); color: #1a1300; }
+    button.danger { background: var(--bad); color: #2a0000; }
+    details { margin-top: 6px; }
+    summary { cursor: pointer; color: var(--dim); font-size: 12px; }
+    .empty { color: var(--dim); font-style: italic; padding: 6px 0; }
+    .reason { color: var(--dim); font-size: 12.5px; margin-top: 2px; white-space: pre-wrap; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--line); }
+    th { color: var(--dim); font-weight: 600; }
+    td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+    tr.total td { font-weight: 700; border-top: 2px solid var(--line); }
+    .bar { display: inline-block; height: 8px; background: var(--accent);
+           border-radius: 4px; vertical-align: middle; min-width: 1px; }
+    .barwrap { display: block; margin-top: 2px; }
+    .tags { color: var(--dim); font-size: 12px; }
+    .tag { display: inline-block; padding: 0 7px; border-radius: 999px;
+           border: 1px solid var(--line); margin-right: 4px; font-size: 11px; }
+    .inactive { opacity: 0.55; }
+    details.cite { margin-top: 8px; }
+    details.cite > summary { color: var(--accent); font-weight: 600; }
+    .infoicon { font-weight: 700; }
+    .cite-body { margin: 6px 0 2px; padding-left: 14px;
+                 border-left: 2px solid var(--line); }
+    .cite-row { padding: 3px 0; font-size: 13px; }
+    .cite-row .cite-where { font-size: 11px; margin-left: 6px; }
+    /* Jumped-to lesson gets a brief accent ring so the link target is obvious. */
+    .panel:target { border-color: var(--accent);
+                    box-shadow: 0 0 0 1px var(--accent) inset; }
+  </style>
+</head>
+<body>
+<header>
+  <h1>Padea — Operator Cockpit</h1>
+  <div class="sub">Read-only cockpit + the learning loop. Local only (127.0.0.1).</div>
+  <nav class="tabs">
+    <a href="{{ url_for('index') }}"    class="{{ 'active' if active_tab == 'feed' }}">Decision feed</a>
+    <a href="{{ url_for('orders') }}"   class="{{ 'active' if active_tab == 'orders' }}">Weekly Orders</a>
+    <a href="{{ url_for('spending') }}" class="{{ 'active' if active_tab == 'spending' }}">Spending</a>
+    <a href="{{ url_for('lessons') }}"  class="{{ 'active' if active_tab == 'lessons' }}">Manage Lessons</a>
+    <a href="{{ url_for('policies') }}" class="{{ 'active' if active_tab == 'policies' }}">Manage Policies</a>
+  </nav>
+</header>
+<main>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, message in messages %}
+        <div class="flash {{ category }}">{{ message }}</div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  {% block content %}{% endblock %}
+
+</main>
+</body>
+</html>

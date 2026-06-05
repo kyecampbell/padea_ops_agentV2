@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block content %}
+
+  <h2>Manage Policies</h2>
+  <div class="muted" style="margin-bottom:12px">
+    Authoritative business rules the agent treats as binding. Every <em>active</em>
+    policy is injected into the agent's always-on context as <code>[Policy #N]</code>
+    and applied immediately. <em>Disable</em> drops a policy from context but keeps
+    it (reversible); <em>delete</em> is permanent. The hard safety/approval
+    invariants live in the handbook and are not editable here.
+  </div>
+
+  <div class="panel">
+    <strong>Add a policy</strong>
+    <form method="post" action="{{ url_for('add_policy_route') }}">
+      <div class="field">
+        <label>Policy text (required)</label>
+        <textarea name="text" placeholder="e.g. Goodwill credits up to $20 may be issued autonomously; above that, escalate." required></textarea>
+      </div>
+      <div class="row">
+        <div class="field" style="margin:0">
+          <label>Sort order (optional — lower reads first)</label>
+          <input type="text" name="sort_order" placeholder="auto" style="max-width:120px">
+        </div>
+        <span class="spacer"></span>
+        <button type="submit">Add policy</button>
+      </div>
+    </form>
+  </div>
+
+  {% if not policies %}
+    <div class="empty">No policies yet. Add one above — until then the agent runs on the handbook and recalled lessons alone.</div>
+  {% endif %}
+
+  {% for p in policies %}
+    <div class="panel {{ '' if p.active else 'inactive' }}" id="policy-{{ p.id }}">
+      <div class="row">
+        <strong>Policy {{ p.id }}</strong>
+        {% if p.active %}
+          <span class="badge ok">active</span>
+        {% else %}
+          <span class="pill off">disabled</span>
+        {% endif %}
+        <span class="muted">order {{ p.sort_order }}</span>
+        <span class="muted">{{ p.updated_at.strftime('%Y-%m-%d %H:%M') if p.updated_at else '' }}</span>
+        <span class="spacer"></span>
+        <form class="inline" method="post" action="{{ url_for('toggle_policy', policy_id=p.id) }}">
+          <input type="hidden" name="active" value="{{ 'false' if p.active else 'true' }}">
+          <button type="submit" class="ghost">{{ 'Disable' if p.active else 'Enable' }}</button>
+        </form>
+        <form class="inline" method="post" action="{{ url_for('delete_policy_route', policy_id=p.id) }}"
+              onsubmit="return confirm('Permanently delete policy {{ p.id }}? This cannot be undone.');">
+          <button type="submit" class="danger">Delete</button>
+        </form>
+      </div>
+
+      <div style="margin-top:8px">{{ p.text }}</div>
+
+      <details>
+        <summary>edit wording</summary>
+        <form method="post" action="{{ url_for('edit_policy', policy_id=p.id) }}">
+          <div class="field">
+            <label>Policy text (required)</label>
+            <textarea name="text" required>{{ p.text }}</textarea>
+          </div>
+          <div class="field">
+            <label>Sort order</label>
+            <input type="text" name="sort_order" value="{{ p.sort_order }}" style="max-width:120px">
+          </div>
+          <button type="submit">Save edits</button>
+        </form>
+      </details>
+    </div>
+  {% endfor %}
+
+{% endblock %}

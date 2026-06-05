@@ -1,0 +1,23 @@
+[project]
+name = "padea-ops-agent"
+version = "0.1.0"
+description = "AI agent that runs end-to-end catering operations for a tutoring company."
+requires-python = ">=3.12"
+dependencies = [
+    "psycopg[binary]",
+    "anthropic",
+    "pydantic",
+    "pydantic-settings",
+    "python-dotenv",
+    "pyyaml",
+    "Flask",
+    "google-api-python-client>=2.197.0",
+    "google-auth>=2.53.0",
+]
+
+[tool.setuptools]
+packages = ["src", "config", "ui"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"

@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block content %}
+
+  <h2>Weekly Orders</h2>
+
+  {% if not weeks %}
+    <div class="empty">No composed orders yet — run the Thursday batch first.</div>
+  {% else %}
+    <div class="panel">
+      <form class="row" method="get" action="{{ url_for('orders') }}">
+        <label class="muted" for="week">Week of</label>
+        <select name="week" id="week" onchange="this.form.submit()">
+          {% for w in weeks %}
+            <option value="{{ w.isoformat() }}" {{ 'selected' if w == week_of }}>
+              {{ w.strftime('%a %d %b %Y') }}
+            </option>
+          {% endfor %}
+        </select>
+        <noscript><button type="submit">Show</button></noscript>
+        <span class="spacer"></span>
+        <span class="muted">{{ caterers|length }} caterer(s) composed</span>
+      </form>
+    </div>
+
+    {% if not caterers %}
+      <div class="empty">No caterer orders for the week of {{ week_of.strftime('%d %b %Y') }}.</div>
+    {% endif %}
+
+    {% for c in caterers %}
+      <div class="panel">
+        <div class="row">
+          <strong>{{ c.caterer_name }}</strong>
+          <span class="muted">· {{ c.total_items }} meals · {{ c.variety_count }} varieties</span>
+          {% if c.moq_floor_applied %}
+            <span class="badge warn">MOQ floor applied</span>
+          {% else %}
+            <span class="badge ok">MOQ met</span>
+          {% endif %}
+          <span class="spacer"></span>
+          <strong>{{ c.total_cost_cents | cents }}</strong>
+        </div>
+
+        <!-- Cost + MOQ breakdown -->
+        <table style="margin-top:10px">
+          <tbody>
+            <tr>
+              <td class="muted">Meals subtotal (ex-GST base)</td>
+              <td class="num">{{ c.meal_base_cents | cents }}</td>
+            </tr>
+            <tr>
+              <td class="muted">Delivery + GST ({{ c.gst_rate_percent }}%)</td>
+              <td class="num">{{ (c.total_cost_cents - c.meal_base_cents) | cents }}</td>
+            </tr>
+            <tr class="total">
+              <td>Week total (GST-incl)</td>
+              <td class="num">{{ c.total_cost_cents | cents }}</td>
+            </tr>
+            <tr>
+              <td class="muted">MOQ floor at {{ c.variety_count }} varieties</td>
+              <td class="num">
+                {{ c.moq_min_total if c.moq_min_total is not none else '—' }}
+                {% if c.moq_variance_cents %}<span class="status-queued">(+{{ c.moq_variance_cents | cents }})</span>{% endif %}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <!-- Meal variety breakdown -->
+        <div style="margin-top:12px" class="muted">Meals ordered ({{ c.variety_count }} varieties)</div>
+        {% if c.meal_breakdown %}
+          <table>
+            <thead>
+              <tr><th>Meal</th><th class="num">Qty</th><th class="num">Unit</th><th class="num">Line total</th></tr>
+            </thead>
+            <tbody>
+              {% for b in c.meal_breakdown %}
+                <tr>
+                  <td>{{ b.item_name }}</td>
+                  <td class="num">{{ b.quantity }}</td>
+                  <td class="num">{{ b.price_cents | cents }}</td>
+                  <td class="num">{{ b.line_total_cents | cents }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% else %}
+          <div class="empty">No meal lines.</div>
+        {% endif %}
+
+        <!-- Per-session manifests -->
+        <details style="margin-top:10px">
+          <summary>Per-session manifests ({{ c.sessions|length }} session(s))</summary>
+          {% for s in c.sessions %}
+            <div class="step">
+              <div class="row">
+                <strong>{{ s.school_name }}</strong>
+                <span class="muted">{{ s.session_date.strftime('%a %d %b') }}</span>
+                <span class="muted">· {{ s.total_items }} meals</span>
+                <span class="spacer"></span>
+                <span class="muted">{{ s.total_cost_cents | cents }}</span>
+              </div>
+              {% if s.lines %}
+                <table style="margin-top:4px">
+                  <thead><tr><th>Student</th><th>Meal</th><th>Source</th></tr></thead>
+                  <tbody>
+                    {% for line in s.lines %}
+                      <tr>
+                        <td>{{ line.student_name }}</td>
+                        <td>{{ line.item_name }}</td>
+                        <td class="muted mono">{{ line.source }}</td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              {% else %}
+                <div class="empty">No lines.</div>
+              {% endif %}
+            </div>
+          {% endfor %}
+        </details>
+      </div>
+    {% endfor %}
+  {% endif %}
+
+{% endblock %}

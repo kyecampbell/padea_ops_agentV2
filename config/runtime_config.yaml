@@ -1,0 +1,34 @@
+# Runtime configuration — tunable operational thresholds.
+#
+# Responsibility: hold values an operator may tune without code changes. Loaded
+# by config/settings.py and merged into the typed settings object.
+#
+# TODO: finalize keys/values as the agent loop and triggers are built.
+
+# Max number of LLM reasoning calls the orchestrator may spend on a single
+# incident before it must escalate or stop (cost / runaway guard).
+per_incident_call_cap: 8
+
+# Inbound email polling interval, in seconds.
+poll_interval_seconds: 300
+
+# Casebook recall: how many similar past cases to retrieve for context.
+recall_case_limit: 5
+
+# Thursday batch MOQ planning: the fraction of a caterer's weekly cohort assumed
+# absent when sizing the order. Expected orders = cohort - round(cohort * rate);
+# this is what the largest affordable MOQ variety tier is chosen against, so the
+# caterer is never committed to a meal floor the cohort can't fill.
+typical_absence_rate: 0.08
+
+# Extra MOQ safety buffer (fraction of the cohort) subtracted from expected
+# orders before choosing V_max — headroom so an above-typical absence spike can't
+# push the order below the floor of the variety tier we committed to (never
+# breach). V_max budget = expected_orders - round(cohort * moq_safety_margin).
+moq_safety_margin: 0.05
+
+# Per-student meal rotation: how many weeks of order history to look back over.
+# A meal a student received within this window is rotated away from in favour of
+# one they have not had recently. ~2-3 weeks of repeats is fine; this keeps a
+# student from being served the same meal many weeks straight.
+rotation_lookback_weeks: 3
