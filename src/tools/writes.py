@@ -247,6 +247,53 @@ def record_dietary_update(enrolment_id: int, new_dietary_raw: str) -> ToolResult
     )
 
 
+# --- Contact-email reconciliation update -------------------------------------
+
+
+_CONTACT_FIELDS = ("parent_email", "student_email")
+
+
+def update_contact_email(enrolment_id: int, new_email: str, field: str = "parent_email") -> ToolResult:
+    """Update a student's on-record contact email after the person CONFIRMED it.
+
+    ``field`` is ``parent_email`` or ``student_email``. Used by the inbound reply
+    flow's identity reconciliation: when someone emails in from an address that
+    differs from what's on file, the agent OFFERS to update it and only calls this
+    once they explicitly confirm (from that same address). A reversible data write
+    (the value can be changed again), so the hard-rules gate marks it autonomous —
+    but the handbook requires the explicit confirmation; this is NEVER silent.
+    """
+    if field not in _CONTACT_FIELDS:
+        return error(f"field must be one of {_CONTACT_FIELDS}; got {field!r}.")
+    email = (new_email or "").strip()
+    if not email or "@" not in email or " " in email:
+        return error(f"new_email must be a valid email address; got {new_email!r}.")
+
+    def work(cur: psycopg.Cursor) -> dict | None:
+        cur.execute(
+            f"""
+            UPDATE enrolments
+            SET {field} = %s
+            WHERE id = %s
+            RETURNING id, {field} AS updated_email
+            """,
+            (email, enrolment_id),
+        )
+        return cur.fetchone()
+
+    row = _transaction(f"updating {field} for enrolment {enrolment_id}", work)
+    if _failed(row):
+        return row
+    if row is None:
+        return conflict(f"No enrolment with id {enrolment_id}; cannot update {field}.")
+
+    logger.info("update_contact_email: enrolment=%s field=%s new=%r", enrolment_id, field, email)
+    return found(
+        {"enrolment_id": enrolment_id, "field": field, "email": row["updated_email"]},
+        f"Updated {field} for enrolment {enrolment_id} to {email}.",
+    )
+
+
 # --- Add enrolment -----------------------------------------------------------
 
 

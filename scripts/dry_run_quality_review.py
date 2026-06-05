@@ -64,7 +64,7 @@ def _complaint_email() -> InboundEmail:
     )
     return InboundEmail(
         gmail_message_id="DRYRUN-complaint-lucas-anderson",
-        from_address="kyec898@gmail.com",  # demo relay — NOT an identity signal
+        from_address="demo-relay@example.com",  # demo relay — NOT an identity signal
         to_address="ops@padea.example",
         subject="Cold dinner last night at John Paul College",
         body=body,

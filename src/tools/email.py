@@ -393,6 +393,133 @@ def send_email(
     )
 
 
+# --- REPLY to an inbound sender (the ONE non-redirected outbound path) --------
+# This is the deliberate branch from the agent-INITIATED ``send_email`` path
+# above. ``send_email`` is for mail the agent ORIGINATES (orders, choice, scorecard,
+# proactive parent/caterer notes): in demo mode it is REDIRECTED to DEMO_SINK_EMAIL
+# (the on-record .example addresses are non-routable) — that sandbox is untouched.
+# ``send_reply`` is ONLY for answering a real person who emailed in: it delivers to
+# their ACTUAL address even in demo mode (they are a real correspondent, not a demo
+# placeholder). Same approval/backstop gate applies, so a reply can never carry a
+# commercial decision and auto-send. In ``dry`` mode it is logged 'drafted', not sent.
+
+REPLY_EMAIL_TYPE = "other"  # a reply is factual/operational (autonomous unless the
+                            # commercial-intent backstop trips on its content).
+
+
+def send_reply(
+    to: str,
+    subject: str,
+    body: str,
+    cc: str | None = None,
+    related_run_id: int | None = None,
+    related_caterer_id: int | None = None,
+    related_enrolment_id: int | None = None,
+    related_order_id: int | None = None,
+) -> ToolResult:
+    """Reply to the ACTUAL sender of an inbound email — delivered to ``to`` even in
+    demo mode (NO sink redirect, NO ``[DEMO …]`` banner), because ``to`` is a real
+    person who wrote in. This is the ONLY outbound path that is not demo-redirected;
+    the agent-initiated ``send_email`` is unchanged. The commercial-intent gate
+    still applies (a reply that reads commercial is queued for approval, not sent).
+    In ``dry`` mode the reply is logged 'drafted' and NOT sent.
+    """
+    if not (to or "").strip():
+        return error("reply recipient 'to' is required.")
+    if not (subject or "").strip():
+        return error("subject is required.")
+    if body is None:
+        return error("body is required (use '' for an empty body).")
+
+    subject = html.unescape(subject)
+    body = html.unescape(body)
+    sanitised = _sanitise_related_ids(
+        {
+            "related_caterer_id": related_caterer_id,
+            "related_enrolment_id": related_enrolment_id,
+            "related_order_id": related_order_id,
+        }
+    )
+    related_caterer_id = sanitised["related_caterer_id"]
+    related_enrolment_id = sanitised["related_enrolment_id"]
+    related_order_id = sanitised["related_order_id"]
+    cc_addresses = _cc_addresses(cc)
+
+    # Gate: a reply must never carry commercial intent and auto-send. Same backstop
+    # as send_email — if the content reads commercial, queue for approval.
+    needs_approval, intent_signals = email_requires_approval(REPLY_EMAIL_TYPE, subject, body)
+    if needs_approval:
+        row = _log_outbound(
+            email_type=REPLY_EMAIL_TYPE, status="queued_for_approval", intended_to=to,
+            cc_addresses=cc_addresses, subject=subject, body=body, gmail_message_id=None,
+            failure_reason=None, related_run_id=related_run_id,
+            related_caterer_id=related_caterer_id, related_enrolment_id=related_enrolment_id,
+            related_order_id=related_order_id,
+        )
+        if _failed(row):
+            return row
+        logger.warning("send_reply: QUEUED (commercial-intent backstop) email=%s to=%r signals=%s",
+                       row["id"], to, intent_signals)
+        return queued(
+            f"Reply to {to} reads as commercial ({', '.join(intent_signals)}); queued for "
+            "operator approval, not sent.",
+            data={"email_id": row["id"], "status": "queued_for_approval", "sent": False,
+                  "commercial_intent_signals": intent_signals},
+        )
+
+    # Dry run: record the draft, send nothing.
+    if settings.email_mode == "dry":
+        row = _log_outbound(
+            email_type=REPLY_EMAIL_TYPE, status="drafted", intended_to=to,
+            cc_addresses=cc_addresses, subject=subject, body=body, gmail_message_id=None,
+            failure_reason=None, related_run_id=related_run_id,
+            related_caterer_id=related_caterer_id, related_enrolment_id=related_enrolment_id,
+            related_order_id=related_order_id,
+        )
+        if _failed(row):
+            return row
+        logger.info("send_reply: DRY RUN drafted reply=%s to=%r (NOT sent)", row["id"], to)
+        return found(
+            {"email_id": row["id"], "status": "drafted", "sent": False, "dry_run": True,
+             "replied_to": to, "demo_routed": False},
+            f"DRY RUN: reply to {to} drafted and logged; NOT sent.",
+        )
+
+    # demo OR live: deliver to the ACTUAL sender — NO redirect, NO banner.
+    try:
+        response = GmailClient().send_message(to, subject, body, cc=cc)
+        gmail_message_id = response.get("id")
+    except Exception as exc:  # Gmail is external; capture, never raise.
+        row = _log_outbound(
+            email_type=REPLY_EMAIL_TYPE, status="failed", intended_to=to,
+            cc_addresses=cc_addresses, subject=subject, body=body, gmail_message_id=None,
+            failure_reason=str(exc), related_run_id=related_run_id,
+            related_caterer_id=related_caterer_id, related_enrolment_id=related_enrolment_id,
+            related_order_id=related_order_id,
+        )
+        if _failed(row):
+            return row
+        logger.warning("send_reply: FAILED reply=%s to=%r: %s", row["id"], to, exc)
+        return unavailable(f"Failed to send reply to {to}: {exc}")
+
+    row = _log_outbound(
+        email_type=REPLY_EMAIL_TYPE, status="sent", intended_to=to,
+        cc_addresses=cc_addresses, subject=subject, body=body,
+        gmail_message_id=gmail_message_id, failure_reason=None, related_run_id=related_run_id,
+        related_caterer_id=related_caterer_id, related_enrolment_id=related_enrolment_id,
+        related_order_id=related_order_id,
+    )
+    if _failed(row):
+        return row
+    logger.info("send_reply: SENT reply=%s to=%r gmail_id=%s (direct to sender, not sink)",
+                row["id"], to, gmail_message_id)
+    return found(
+        {"email_id": row["id"], "status": "sent", "sent": True,
+         "gmail_message_id": gmail_message_id, "replied_to": to, "demo_routed": False},
+        f"Replied directly to {to}.",
+    )
+
+
 # --- Operator-approved release ------------------------------------------------
 
 

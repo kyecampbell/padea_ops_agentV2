@@ -34,6 +34,7 @@ import base64
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from email.utils import parseaddr
 from typing import Any
 
 import anthropic
@@ -181,9 +182,21 @@ def _parse_message(full: dict) -> InboundEmail:
 # --- Orchestrator hand-off ----------------------------------------------------
 
 
+def sender_address(email: InboundEmail) -> str:
+    """The bare reply-to address of the inbound message (display name stripped)."""
+    return parseaddr(email.from_address or "")[1].strip()
+
+
 def _format_task(email: InboundEmail) -> str:
     """Lay the email out clearly for the orchestrator. No instructions about a
-    specific case — the agent reads the policy and decides."""
+    specific case — the agent reads the policy and decides.
+
+    The sender's reply-to address IS shown, but ONLY for two purposes: addressing a
+    reply (the reply tool delivers to the actual sender) and reconciling their
+    contact email. It is explicitly NOT an identity signal — identity still comes
+    from the body, per the handbook.
+    """
+    sender = sender_address(email) or "(unknown)"
     return (
         "A new inbound email has arrived in the Padea operations inbox. Work out "
         "what it is and who it concerns, then handle it per the handbook's "
@@ -192,14 +205,23 @@ def _format_task(email: InboundEmail) -> str:
         "--- INBOUND EMAIL ---\n"
         f"Gmail message id: {email.gmail_message_id}\n"
         f"Received (UTC): {email.received_at.isoformat()}\n"
-        "From: (demo relay — not an identity signal)\n"
+        f"Sender reply-to address: {sender}\n"
+        "  (Use this ONLY to (a) address your reply — reply_to_sender delivers to "
+        "this address — and (b) reconcile their contact email on file. It is NOT "
+        "proof of who they are; identify the person from the body.)\n"
         f"To: {email.to_address}\n"
         f"Subject: {email.subject}\n\n"
         f"{email.body or '(no readable body)'}\n"
         "--- END EMAIL ---\n\n"
         "Decide and act: act/queue the change, reply asking for confirmation, or "
-        "escalate to a human — whichever the policy calls for. Conclude with a "
-        "short summary of what you determined and what you did."
+        "escalate to a human — whichever the policy calls for. If you reply, use "
+        "reply_to_sender (it goes to the actual sender). Once you've identified the "
+        "person, compare their on-record email to the sender reply-to address above; "
+        "if they differ, your reply should note the on-record address and OFFER to "
+        "update it to this one — and only call update_contact_email if they have "
+        "EXPLICITLY confirmed the change in this email. If you cannot confidently "
+        "identify the person, do NOT claim a mismatch — ask who they are or escalate. "
+        "Conclude with a short summary of what you determined and what you did."
     )
 
 
@@ -412,7 +434,10 @@ def poll_inbox(max_results: int = 25, unread_only: bool = True) -> list[Processe
                     logger.warning("inbound: could not mark own mail read msg=%s", gmail_message_id)
                 continue
 
-            run = run_incident(trigger_reason="inbound_email", task=_format_task(email))
+            run = run_incident(
+                trigger_reason="inbound_email", task=_format_task(email),
+                extra_context={"inbound_from_address": sender_address(email)},
+            )
             classified_as = _classify(email, run.final_text, codes)
             related_enrolment_id, related_order_id = _related_ids(run.run_id)
 

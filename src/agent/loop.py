@@ -329,7 +329,7 @@ def _queued_result(tool_name: str, tool_input: dict[str, Any]) -> ToolResult:
 
 
 def _enforce_and_dispatch(
-    tool_name: str, tool_input: dict[str, Any], run_id: int | None = None
+    tool_name: str, tool_input: dict[str, Any], context: dict[str, Any] | None = None
 ) -> tuple[ToolResult, ActionClass]:
     """Gate, then (only if allowed) dispatch one tool call.
 
@@ -338,13 +338,15 @@ def _enforce_and_dispatch(
     still dispatch because it self-records the mail as ``queued_for_approval``
     (and never sends it); all other gated writes get a ``_queued_result``.
 
-    ``run_id`` is passed to ``dispatch`` as ambient context so tool output
-    (escalations, emails, the batch's composed orders) links back to this run.
+    ``context`` is the ambient run context passed to ``dispatch`` (always carries
+    ``run_id``; for an inbound incident it also carries ``inbound_from_address`` so
+    the reply tool can route to the actual sender). Tool ``context_args`` pull from
+    it; the model never sees or controls these.
     """
     verdict = _gate_verdict(tool_name, tool_input)
     if verdict == "requires_approval" and tool_name != "send_email":
         return _queued_result(tool_name, tool_input), verdict
-    return dispatch(tool_name, tool_input, {"run_id": run_id}), verdict
+    return dispatch(tool_name, tool_input, context or {}), verdict
 
 
 # --- Orchestration -----------------------------------------------------------
@@ -357,7 +359,8 @@ def _text_of(content: list[Any]) -> str:
 
 
 def run_incident(
-    trigger_reason: str, task: str, call_cap: int | None = None
+    trigger_reason: str, task: str, call_cap: int | None = None,
+    extra_context: dict[str, Any] | None = None,
 ) -> RunResult:
     """Drive one incident to a final text answer.
 
@@ -368,8 +371,12 @@ def run_incident(
     ``call_cap`` overrides ``settings.per_incident_call_cap`` for this incident —
     a multi-caterer Thursday batch (compose, then send orders + parent emails +
     surface escalations) needs more reasoning turns than a single inbound email.
+    ``extra_context`` adds ambient run context for tool ``context_args`` (e.g. the
+    inbound sender's address, so the reply tool can route to the actual sender);
+    it is merged with ``run_id`` and never exposed to the model.
     """
     run_id = _open_run(trigger_reason)
+    run_context: dict[str, Any] = {"run_id": run_id, **(extra_context or {})}
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
     schemas = tool_schemas()
     system, recalled_ids, policy_ids = _system_prompt(task)
@@ -412,7 +419,7 @@ def run_incident(
 
         tool_result_blocks: list[dict[str, Any]] = []
         for use in tool_uses:
-            result, action_class = _enforce_and_dispatch(use.name, use.input, run_id)
+            result, action_class = _enforce_and_dispatch(use.name, use.input, run_context)
             step_id = _log_step(
                 run_id,
                 step_index,

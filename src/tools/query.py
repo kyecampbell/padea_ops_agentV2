@@ -64,7 +64,7 @@ def get_enrolment(enrolment_id: int) -> ToolResult:
         f"fetching enrolment {enrolment_id}",
         """
         SELECT id, school_id, student_name, student_year_level,
-               parent_name, parent_email, parent_phone,
+               parent_name, parent_email, parent_phone, student_email,
                original_start_date, current_period_start_date,
                current_period_end_date, opted_out_of_catering, dietary_raw
         FROM enrolments

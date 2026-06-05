@@ -61,6 +61,12 @@ _TOOL_ACTION_CLASS: dict[str, ActionClass] = {
     # backstop still scans each body so it can't drift into a warning/RFP/price.
     "get_caterer_weekly_summary": "autonomous",
     "send_caterer_weekly_summaries": "autonomous",
+    # Inbound reply + identity reconciliation. Replying to the actual sender is
+    # factual/operational (the commercial-intent backstop still scans the body in
+    # email.send_reply). Updating a contact email is a reversible data change the
+    # handbook only permits after the sender's explicit confirmation (never silent).
+    "reply_to_sender": "autonomous",
+    "update_contact_email": "autonomous",
     # The Thursday-batch calculator: read/compute that composes the safe order and
     # raises its own escalations. Idempotent per (caterer, week); a re-run replaces
     # rather than duplicates. The binding step is the order EMAIL (gated per kind),

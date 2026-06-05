@@ -624,6 +624,48 @@ _TOOLS: tuple[Tool, ...] = (
         required=("week_of",),
         context_args=(("run_id", "run_id"),),
     ),
+    # --- Inbound reply + identity reconciliation -----------------------------
+    Tool(
+        name="reply_to_sender",
+        description=(
+            "Reply to the person who sent the inbound email you're handling. Unlike "
+            "send_email (agent-INITIATED mail, demo-routed to the sink), this delivers "
+            "to the ACTUAL sender's address even in demo mode — because they are a real "
+            "correspondent who wrote in. You do NOT supply the address; it is the "
+            "inbound sender's address, injected automatically. Use this for every reply "
+            "to an inbound email (clarifications, confirmations, the contact-email update "
+            "offer). Factual/operational — autonomous — but the commercial-intent "
+            "backstop still applies, so a reply that reads commercial is queued for "
+            "approval. Only valid while handling an inbound email."
+        ),
+        func=email.send_reply,
+        parameters={
+            "subject": {"type": "string", "description": "The reply subject line."},
+            "body": {"type": "string", "description": "The plain-text reply body."},
+            "related_enrolment_id": {"type": "integer", "description": "The enrolment this concerns (optional, for the audit trail)."},
+        },
+        required=("subject", "body"),
+        context_args=(("to", "inbound_from_address"), ("related_run_id", "run_id")),
+    ),
+    Tool(
+        name="update_contact_email",
+        description=(
+            "Update a student's on-record contact email (field 'parent_email' or "
+            "'student_email') during inbound identity reconciliation. Call this ONLY "
+            "after the person has EXPLICITLY confirmed, in their email, that they want "
+            "the on-file address changed to the one they're writing from — never "
+            "silently and never on a guess. A reversible data change (autonomous), but "
+            "the explicit confirmation is required by policy. If you're unsure who they "
+            "are, do not call this — ask or escalate."
+        ),
+        func=writes.update_contact_email,
+        parameters={
+            "enrolment_id": {"type": "integer", "description": "The enrolment id (integer)."},
+            "new_email": {"type": "string", "description": "The confirmed new email (normally the sender's reply-to address)."},
+            "field": {"type": "string", "description": "'parent_email' or 'student_email' — which contact to update."},
+        },
+        required=("enrolment_id", "new_email", "field"),
+    ),
     # --- Communication -------------------------------------------------------
     Tool(
         name="send_email",
