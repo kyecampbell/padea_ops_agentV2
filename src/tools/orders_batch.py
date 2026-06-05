@@ -90,9 +90,11 @@ from src.tools.results import ToolResult, error, found, unavailable
 
 # order_line_source provenance codes. Most lines are rotation-sourced (the
 # student's rotated standing preference); a safe student with no usable
-# preference gets a tentative default line, flagged for parent confirmation.
+# preference gets a tentative default line, flagged for parent confirmation; a
+# student who made a weekly PICK gets a request-sourced line for that session.
 _LINE_SOURCE = "rotation"
 _DEFAULT_SOURCE = "defaulted_pending_confirmation"
+_REQUEST_SOURCE = "request"  # the student's own weekly choose-and-rate pick.
 
 # Caterer-WIDE escalation reasons (compose nothing sendable for the caterer).
 ESC_COVERAGE_INFEASIBLE = "coverage_infeasible"  # no <=V_max set covers everyone
@@ -172,6 +174,7 @@ class CatererWeekSummary:
     escalation_id: int | None = None
     escalation_reason: str | None = None
     escalation_detail: str | None = None
+    request_count: int = 0  # of total_items, how many are student weekly picks
 
     # The week's order as a meal-by-meal breakdown for the caterer email:
     # one entry per distinct ordered item, {menu_item_id, item, quantity}.
@@ -405,6 +408,40 @@ def _recent_meals(
     return out
 
 
+def _student_picks(
+    enrolment_ids: list[int], week_of: date
+) -> dict[int, dict[int, int]] | ToolResult:
+    """{enrolment_id: {session_slot_id: menu_item_id}} — the students' own weekly
+    PICKS (``meal_requests``) for sessions in ``[week_of, week_of + 7)``.
+
+    Read verbatim; the caller validates each pick is dietary-safe AND in the
+    offered set before honouring it (an invalid/stale pick is simply not applied,
+    and the student falls back to rotation / default). The most recent request per
+    (enrolment, slot) wins, so a re-pick supersedes an earlier one.
+    """
+    if not enrolment_ids:
+        return {}
+    start, end = week_of, week_of + timedelta(days=7)
+    rows = _read(
+        "loading student meal picks",
+        """
+        SELECT DISTINCT ON (enrolment_id, session_slot_id)
+               enrolment_id, session_slot_id, menu_item_id
+        FROM meal_requests
+        WHERE enrolment_id = ANY(%s)
+          AND session_date >= %s AND session_date < %s
+        ORDER BY enrolment_id, session_slot_id, requested_at DESC
+        """,
+        (enrolment_ids, start, end),
+    )
+    if _failed(rows):
+        return rows
+    out: dict[int, dict[int, int]] = defaultdict(dict)
+    for r in rows:
+        out[r["enrolment_id"]][r["session_slot_id"]] = r["menu_item_id"]
+    return out
+
+
 # --- MOQ ceiling + variety scoring -------------------------------------------
 
 
@@ -497,6 +534,7 @@ def _assign_sequence(
     pref_candidates: list[int],
     recent: dict[int, date],
     rank: dict[int, int],
+    forced: dict[int, int] | None = None,
 ) -> dict[int, int]:
     """Assign one meal per rostered session — a per-student meal SEQUENCE.
 
@@ -504,17 +542,24 @@ def _assign_sequence(
     chronological order. ``pref_candidates`` are their eligible preferences in the
     offered set, ``recent`` the most-recent date each item was received in the
     lookback window, and ``rank`` the item's preference position (lower = better).
+    ``forced`` maps a slot to the meal the STUDENT PICKED for it (validated in the
+    offered set + their safe pool by the caller) — that slot takes the pick
+    verbatim instead of rotating.
 
-    For each session in turn the pick is the candidate that, by a total order:
+    For each NON-forced session in turn the pick is the candidate that, by a total
+    order:
       1. is NOT the immediately-preceding meal (within the week, or the most
          recent historical meal for the first session) — avoids back-to-back;
       2. has NOT already been used this week — distinct meals within the week;
       3. was least-recently received (never-received first) — cross-week rotation;
       4. is the higher preference, then the lowest id — deterministic ties.
-    After each pick the chosen item becomes "just used" so the next session avoids
-    it. With only one candidate the penalties simply tie and it repeats (an
-    occasional, unavoidable repeat). Returns ``{slot_id: menu_item_id}``.
+    A forced (picked) slot is honoured verbatim. After each assignment the chosen
+    item becomes "just used" so the next session avoids it (so a pick still pushes
+    the rest of the sequence toward distinctness). With only one candidate the
+    penalties simply tie and it repeats (an occasional, unavoidable repeat).
+    Returns ``{slot_id: menu_item_id}``.
     """
+    forced = forced or {}
     last_used = dict(recent)                       # item -> last date received
     used_this_week: set[int] = set()
     # Seed the back-to-back guard with the most recent historical meal, if any.
@@ -522,16 +567,19 @@ def _assign_sequence(
 
     assignment: dict[int, int] = {}
     for slot_id, s_date in session_order:
-        def key(item: int) -> tuple:
-            return (
-                item == prev_item,                 # avoid the immediately-prior meal
-                item in used_this_week,            # prefer distinct within the week
-                last_used.get(item, date.min),     # least-recently received first
-                rank.get(item, 10**9),             # then best preference
-                item,                              # then lowest id
-            )
+        if slot_id in forced:
+            chosen = forced[slot_id]               # the student's own pick wins.
+        else:
+            def key(item: int) -> tuple:
+                return (
+                    item == prev_item,             # avoid the immediately-prior meal
+                    item in used_this_week,        # prefer distinct within the week
+                    last_used.get(item, date.min), # least-recently received first
+                    rank.get(item, 10**9),         # then best preference
+                    item,                          # then lowest id
+                )
 
-        chosen = min(pref_candidates, key=key)
+            chosen = min(pref_candidates, key=key)
         assignment[slot_id] = chosen
         used_this_week.add(chosen)
         last_used[chosen] = s_date
@@ -628,9 +676,58 @@ def compose_week(week_of: date, *, run_id: int | None = None, only_caterer_id: i
     )
 
 
-def _compose_caterer_week(caterer: dict, week_of: date, run_id: int | None) -> dict | ToolResult:
-    """Compose one caterer's week (or escalate): gather, size V_max, choose the
-    offered set, rotate per student, persist, summarise."""
+@dataclass
+class CatererWeekPlan:
+    """Everything gathered + sized + offered for one caterer-week, BEFORE the
+    per-student assignment and persistence. This is the single source of truth for
+    the offered set: ``compose_week`` consumes it to assign + persist, and the
+    student choose-and-rate email reads the SAME plan so the options a kid is shown
+    are exactly the set compose later honours their pick against.
+
+    Pure (reads only, no writes). When the caterer can't compose at all,
+    ``escalation`` is a ``(reason, detail, context)`` triple the caller turns into a
+    caterer-wide escalation; otherwise it is ``None`` and ``offered`` is the chosen
+    set.
+    """
+
+    caterer: dict
+    week_of: date
+    run_id: int | None
+    menu: dict[int, dict]
+    tiers: list[dict]
+    all_items: set[int]
+    slot_ids: list[int]
+    session_dates: list[date]
+    school_names: dict[int, str]
+    num_sessions: int
+    gst_rate: float
+    includes_gst: bool
+    delivery_fee: int
+    students: dict[int, dict]
+    safe_students: dict[int, dict]
+    stragglers: list[dict]
+    student_sessions: dict[int, list[int]]
+    session_meta: dict[int, tuple[date, str]]
+    recent: dict[int, dict[int, date]]
+    popularity: dict[int, float]
+    offered: set[int]
+    ceiling: int
+    sizing: dict
+    base: dict
+    escalation: tuple[str, str, dict] | None = None
+
+
+def plan_caterer_week(
+    caterer: dict, week_of: date, run_id: int | None = None
+) -> CatererWeekPlan | ToolResult:
+    """Gather, size V_max, and choose the offered set for one caterer-week — PURE.
+
+    Returns a ``CatererWeekPlan`` (with ``escalation`` set when the caterer can't
+    compose: nothing safe to order, the safe order can't meet any MOQ floor, or
+    dietary coverage is infeasible within V_max), or a typed read failure. Does NOT
+    assign meals or write anything — that is ``compose_week``'s job. Extracted so
+    the offered set is computed once and reused by the student choose-and-rate flow.
+    """
     caterer_id = caterer["id"]
     includes_gst = caterer["price_includes_gst"]
     gst_rate = float(caterer["gst_rate_percent"])
@@ -759,85 +856,158 @@ def _compose_caterer_week(caterer: dict, week_of: date, run_id: int | None) -> d
         vmax_budget=vmax_budget, v_max=v_max,
     )
 
+    popularity: dict[int, float] = {}
+    offered: set[int] = set()
+    ceiling = 0
+    escalation: tuple[str, str, dict] | None = None
+
     # --- Caterer-WIDE escalation: nothing safe to order at all this week. ---
     if not safe_students:
         detail = (
             f"No student has a safe, orderable meal this week — {len(stragglers)} "
             f"need dietary confirmation or a menu fix before any order can be sent."
         )
-        return _escalate(base, ESC_COVERAGE_INFEASIBLE, detail,
-                         {"escalated_students": stragglers}, sizing)
-
+        escalation = (ESC_COVERAGE_INFEASIBLE, detail, {"escalated_students": stragglers})
     # --- Caterer-WIDE escalation: the safe order can't meet any MOQ floor. ---
-    if tiers and v_max == 0:
+    elif tiers and v_max == 0:
         smallest = min(t["min_total_items"] for t in tiers)
         detail = (
             f"The remaining safe order ({vmax_budget} after the safety margin) "
             f"cannot meet the smallest MOQ floor ({smallest}); any order would "
             f"breach the tier. Too few orderable students this week."
         )
-        return _escalate(base, ESC_MOQ_BREACH, detail,
-                         {"smallest_floor": smallest, "escalated_students": stragglers}, sizing)
-
-    ceiling = v_max if tiers else len(all_items)
-
-    # --- Offered set: cover the safe dietary students, then maximize preference.
-    # Empty-pool stragglers are excluded — they're escalated, not covered. ---
-    popularity = _rank_weighted_popularity(safe_students)
-    dietary_ids = [eid for eid, s in safe_students.items() if s["pool"] != all_items]
-    offered, uncovered = _select_offered_set(safe_students, dietary_ids, all_items, popularity, ceiling)
-    if uncovered:
-        names = [safe_students[e]["name"] for e in uncovered]
-        detail = (
-            f"No set of <= V_max ({ceiling}) varieties can give every dietary "
-            f"student a safe meal; {len(uncovered)} remain uncovered: {', '.join(names)}."
-        )
-        return _escalate(
-            base, ESC_COVERAGE_INFEASIBLE, detail,
-            {"uncovered_enrolment_ids": uncovered, "uncovered_students": names,
-             "escalated_students": stragglers},
-            sizing,
-        )
-
-    # --- Assign each safe student a meal SEQUENCE — one meal per rostered
-    # session. A student with eligible preferences gets a rotated sequence
-    # (distinct meals within the week where their prefs allow, rotating across
-    # weeks); one with no usable preference keeps a single tentative safe default
-    # flagged for parent confirmation across their session(s). ---
-    lines_by_session: dict[int, list[tuple[int, int]]] = defaultdict(list)
-    student_items: dict[int, list[int]] = {}   # items per student, session order
-    line_sources: dict[int, str] = {}
-    for eid, s in safe_students.items():
-        session_order = sorted(
-            student_sessions[eid], key=lambda slot: (session_meta[slot][0], slot)
-        )
-        pref_candidates = [i for i in s["eligible_prefs"] if i in offered]
-        if pref_candidates:
-            rank = {item: pos for pos, item in enumerate(s["eligible_prefs"])}
-            seq = _assign_sequence(
-                [(slot, session_meta[slot][0]) for slot in session_order],
-                pref_candidates, recent.get(eid, {}), rank,
+        escalation = (ESC_MOQ_BREACH, detail,
+                      {"smallest_floor": smallest, "escalated_students": stragglers})
+    else:
+        ceiling = v_max if tiers else len(all_items)
+        # --- Offered set: cover the safe dietary students, then maximize
+        # preference. Empty-pool stragglers are excluded — escalated, not covered. ---
+        popularity = _rank_weighted_popularity(safe_students)
+        dietary_ids = [eid for eid, s in safe_students.items() if s["pool"] != all_items]
+        offered, uncovered = _select_offered_set(safe_students, dietary_ids, all_items, popularity, ceiling)
+        if uncovered:
+            names = [safe_students[e]["name"] for e in uncovered]
+            detail = (
+                f"No set of <= V_max ({ceiling}) varieties can give every dietary "
+                f"student a safe meal; {len(uncovered)} remain uncovered: {', '.join(names)}."
             )
-            line_sources[eid] = _LINE_SOURCE
-        else:
-            item = _default_pick(s["pool"] & offered, popularity)
-            seq = {slot: item for slot in session_order}
-            line_sources[eid] = _DEFAULT_SOURCE
-        student_items[eid] = [seq[slot] for slot in session_order]
-        for slot in session_order:
-            lines_by_session[slot].append((eid, seq[slot]))
+            escalation = (
+                ESC_COVERAGE_INFEASIBLE, detail,
+                {"uncovered_enrolment_ids": uncovered, "uncovered_students": names,
+                 "escalated_students": stragglers},
+            )
 
-    # --- Cost + actual variety. ---
-    assigned_items = [item for lines in lines_by_session.values() for _, item in lines]
+    return CatererWeekPlan(
+        caterer=caterer, week_of=week_of, run_id=run_id, menu=menu, tiers=tiers,
+        all_items=all_items, slot_ids=slot_ids, session_dates=session_dates,
+        school_names=school_names, num_sessions=len(sessions), gst_rate=gst_rate,
+        includes_gst=includes_gst, delivery_fee=delivery_fee, students=students,
+        safe_students=safe_students, stragglers=stragglers,
+        student_sessions=student_sessions, session_meta=session_meta, recent=recent,
+        popularity=popularity, offered=offered, ceiling=ceiling, sizing=sizing,
+        base=base, escalation=escalation,
+    )
+
+
+def _assign_one(
+    plan: CatererWeekPlan, eid: int, forced: dict[int, int] | None = None
+) -> list[tuple[int, int, str]]:
+    """Assign one safe student's meal sequence for the plan's week — PURE.
+
+    ``forced`` maps a slot to the meal the student PICKED. A pick is honoured ONLY
+    when it is dietary-safe (in the student's pool) AND in the offered set — an
+    invalid/stale pick is dropped and the student falls back to rotation / default
+    (so a free choice can never breach safety or the MOQ ceiling). Assignment
+    priority per session: (a) the student's pick; (b) their rotated eligible
+    preference; (c) a tentative safe default. Returns ``[(slot_id, item_id,
+    source)]`` in chronological session order; ``source`` is ``request`` for a
+    honoured pick, ``rotation`` for a preference pick, ``defaulted_pending_
+    confirmation`` for a default.
+    """
+    s = plan.safe_students[eid]
+    session_order = sorted(
+        plan.student_sessions[eid], key=lambda slot: (plan.session_meta[slot][0], slot)
+    )
+    forced = forced or {}
+    valid_forced = {
+        slot: item
+        for slot, item in forced.items()
+        if slot in session_order and item in s["pool"] and item in plan.offered
+    }
+
+    pref_candidates = [i for i in s["eligible_prefs"] if i in plan.offered]
+    if pref_candidates:
+        rank = {item: pos for pos, item in enumerate(s["eligible_prefs"])}
+        seq = _assign_sequence(
+            [(slot, plan.session_meta[slot][0]) for slot in session_order],
+            pref_candidates, plan.recent.get(eid, {}), rank, forced=valid_forced,
+        )
+        base_source = _LINE_SOURCE
+    else:
+        # No usable preference: a tentative safe default, but honour any pick first.
+        default_item = _default_pick(s["pool"] & plan.offered, plan.popularity)
+        seq = {
+            slot: (valid_forced[slot] if slot in valid_forced else default_item)
+            for slot in session_order
+        }
+        base_source = _DEFAULT_SOURCE
+
+    out: list[tuple[int, int, str]] = []
+    for slot in session_order:
+        item = seq[slot]
+        source = _REQUEST_SOURCE if valid_forced.get(slot) == item else base_source
+        out.append((slot, item, source))
+    return out
+
+
+def _compose_caterer_week(caterer: dict, week_of: date, run_id: int | None) -> dict | ToolResult:
+    """Compose one caterer's week (or escalate): plan (gather, size V_max, choose
+    the offered set), honour each student's weekly PICK over the fallback, rotate
+    the rest, persist, summarise."""
+    plan = plan_caterer_week(caterer, week_of, run_id)
+    if _failed(plan):
+        return plan
+    if plan.escalation:
+        reason, detail, context = plan.escalation
+        return _escalate(plan.base, reason, detail, context, plan.sizing)
+
+    caterer_id = caterer["id"]
+    menu = plan.menu
+    safe_students = plan.safe_students
+    offered = plan.offered
+    sizing = plan.sizing
+
+    # --- The students' own weekly picks (validated inside _assign_one). ---
+    picks = _student_picks(list(plan.students), week_of)
+    if _failed(picks):
+        return picks
+
+    # --- Assign each safe student a meal SEQUENCE — one meal per rostered session.
+    # Priority: (a) the student's PICK if eligible + in the offered set; (b) a
+    # rotated eligible preference; (c) a tentative safe default flagged for parent
+    # confirmation. Picks are within V_max by construction, so they never push
+    # variety past the MOQ ceiling. ---
+    lines_by_session: dict[int, list[tuple[int, int, str]]] = defaultdict(list)
+    student_items: dict[int, list[int]] = {}     # items per student, session order
+    student_sources: dict[int, list[str]] = {}   # parallel sources, session order
+    for eid in safe_students:
+        assigned = _assign_one(plan, eid, picks.get(eid, {}))
+        student_items[eid] = [item for _, item, _ in assigned]
+        student_sources[eid] = [src for _, _, src in assigned]
+        for slot, item, src in assigned:
+            lines_by_session[slot].append((eid, item, src))
+
+    # --- Cost + actual variety (one row per student-session line). ---
+    assigned = [line for lines in lines_by_session.values() for line in lines]
+    assigned_items = [item for _, item, _ in assigned]
     total_items = len(assigned_items)
     variety_count = len(set(assigned_items))
-    defaulted_count = sum(
-        len(student_sessions[eid]) for eid, src in line_sources.items() if src == _DEFAULT_SOURCE
-    )
+    defaulted_count = sum(1 for _, _, src in assigned if src == _DEFAULT_SOURCE)
+    request_count = sum(1 for _, _, src in assigned if src == _REQUEST_SOURCE)
     meal_base = sum(menu[item]["price_cents"] for item in assigned_items)
-    delivery_base = delivery_fee * len(lines_by_session)
+    delivery_base = plan.delivery_fee * len(lines_by_session)
 
-    moq_min_total = _floor_for_variety(tiers, variety_count) if tiers else None
+    moq_min_total = _floor_for_variety(plan.tiers, variety_count) if plan.tiers else None
     shortfall = max(0, (moq_min_total or 0) - total_items)
     # By construction distinct items <= V_max so the floor is met; a shortfall
     # would mean a breach slipped through — refuse to compose and escalate.
@@ -846,24 +1016,24 @@ def _compose_caterer_week(caterer: dict, week_of: date, run_id: int | None) -> d
             f"Composed safe order would breach the MOQ floor ({total_items} meals "
             f"< floor {moq_min_total} at {variety_count} varieties)."
         )
-        return _escalate(base, ESC_MOQ_BREACH, detail,
+        return _escalate(plan.base, ESC_MOQ_BREACH, detail,
                          {"total_items": total_items, "moq_min_total": moq_min_total,
-                          "variety_count": variety_count, "escalated_students": stragglers}, sizing)
+                          "variety_count": variety_count, "escalated_students": plan.stragglers}, sizing)
 
     week_total = _gst_normalise(
-        meal_base + delivery_base, includes_gst=includes_gst, gst_rate_percent=gst_rate
+        meal_base + delivery_base, includes_gst=plan.includes_gst, gst_rate_percent=plan.gst_rate
     )
 
     # --- Persist (idempotent; writes per-student escalations, clears stale ones). ---
     session_summaries, cwo_id = _persist_caterer_week(
         caterer=caterer, week_of=week_of, run_id=run_id,
-        slot_ids=slot_ids, session_dates=session_dates,
-        lines_by_session=lines_by_session, line_sources=line_sources,
-        session_meta=session_meta, menu=menu,
+        slot_ids=plan.slot_ids, session_dates=plan.session_dates,
+        lines_by_session=lines_by_session,
+        session_meta=plan.session_meta, menu=menu,
         total_items=total_items, variety_count=variety_count,
         moq_min_total=moq_min_total, total_cost_cents=week_total,
-        gst_rate=gst_rate, includes_gst=includes_gst, delivery_fee=delivery_fee,
-        stragglers=stragglers,
+        gst_rate=plan.gst_rate, includes_gst=plan.includes_gst, delivery_fee=plan.delivery_fee,
+        stragglers=plan.stragglers,
     )
     if _failed(session_summaries):
         return session_summaries
@@ -881,7 +1051,19 @@ def _compose_caterer_week(caterer: dict, week_of: date, run_id: int | None) -> d
     ]
 
     # Every defaulted line in full (parent contact included) so the agent can
-    # email each parent; ordered by student name for a stable read.
+    # email each parent; ordered by student name for a stable read. A student is
+    # "defaulted" when ANY of their session lines is a tentative default (the first
+    # such item is the one the prefs follow-up references).
+    def _first_default_item(eid: int) -> str:
+        for item, src in zip(student_items[eid], student_sources[eid]):
+            if src == _DEFAULT_SOURCE:
+                return menu[item]["name"]
+        return ""
+
+    defaulted_eids = sorted(
+        {eid for eid in safe_students if _DEFAULT_SOURCE in student_sources[eid]},
+        key=lambda e: safe_students[e]["name"],
+    )
     defaulted_lines = [
         {
             "enrolment_id": eid,
@@ -889,21 +1071,20 @@ def _compose_caterer_week(caterer: dict, week_of: date, run_id: int | None) -> d
             "parent_name": safe_students[eid]["parent_name"],
             "parent_email": safe_students[eid]["parent_email"],
             "school_name": safe_students[eid]["school_name"],
-            "item": menu[student_items[eid][0]]["name"],
+            "item": _first_default_item(eid),
         }
-        for eid in sorted(line_sources, key=lambda e: safe_students[e]["name"])
-        if line_sources[eid] == _DEFAULT_SOURCE
+        for eid in defaulted_eids
     ]
 
     summary = CatererWeekSummary(
         caterer_id=caterer_id,
         caterer_name=caterer["name"],
         caterer_contact_email=caterer.get("contact_email"),
-        schools=[school_names[sid] for sid in sorted(school_names)],
+        schools=[plan.school_names[sid] for sid in sorted(plan.school_names)],
         week_of=week_of.isoformat(),
-        num_sessions=len(sessions),
+        num_sessions=plan.num_sessions,
         status="composed",
-        offered_items=[menu[i]["name"] for i in sorted(offered, key=lambda i: (-popularity.get(i, 0.0), i))],
+        offered_items=[menu[i]["name"] for i in sorted(offered, key=lambda i: (-plan.popularity.get(i, 0.0), i))],
         offered_count=len(offered),
         variety_count=variety_count,
         total_items=total_items,
@@ -912,14 +1093,15 @@ def _compose_caterer_week(caterer: dict, week_of: date, run_id: int | None) -> d
         moq_floor_applied=False,
         moq_variance_cents=0,
         total_cost_cents=week_total,
-        gst_rate_percent=gst_rate,
-        price_includes_gst=includes_gst,
+        gst_rate_percent=plan.gst_rate,
+        price_includes_gst=plan.includes_gst,
         caterer_week_orders_id=cwo_id,
         meal_breakdown=meal_breakdown,
         sessions=session_summaries,
-        rotation_sample=_rotation_sample(safe_students, student_items, recent, menu),
+        rotation_sample=_rotation_sample(safe_students, student_items, plan.recent, menu),
         defaulted_lines=defaulted_lines,
-        escalated_students=stragglers,
+        escalated_students=plan.stragglers,
+        request_count=request_count,
         **sizing,
     )
     return summary.as_dict()
@@ -1022,7 +1204,7 @@ def _escalate(
 
 def _persist_caterer_week(
     *, caterer, week_of, run_id, slot_ids, session_dates,
-    lines_by_session, line_sources, session_meta, menu,
+    lines_by_session, session_meta, menu,
     total_items, variety_count, moq_min_total, total_cost_cents,
     gst_rate, includes_gst, delivery_fee, stragglers,
 ) -> tuple[list[SessionSummary], int | None] | ToolResult:
@@ -1032,11 +1214,13 @@ def _persist_caterer_week(
     Idempotent: deletes any existing orders (and their lines) for this caterer's
     session slots on the week's dates, the prior ``caterer_week_orders`` row for
     (caterer, week), and ALL our prior open escalations (caterer-wide and
-    per-student) for the week, then re-inserts. Each order line carries its own
-    source (``rotation`` or ``defaulted_pending_confirmation``). The MOQ floor is
-    met by construction, so floor/variance are recorded as not applied. Mutates
-    each straggler dict with the ``escalation_id`` raised for it. Returns the
-    per-session summaries and the new ``caterer_week_orders`` id.
+    per-student) for the week, then re-inserts. ``lines_by_session`` maps a slot to
+    ``[(enrolment_id, menu_item_id, source)]`` and each line carries its OWN source
+    (``request`` for a student pick, ``rotation``, or ``defaulted_pending_
+    confirmation``). The MOQ floor is met by construction, so floor/variance are
+    recorded as not applied. Mutates each straggler dict with the ``escalation_id``
+    raised for it. Returns the per-session summaries and the new
+    ``caterer_week_orders`` id.
     """
     caterer_id = caterer["id"]
 
@@ -1072,7 +1256,7 @@ def _persist_caterer_week(
         summaries: list[SessionSummary] = []
         for slot_id, lines in sorted(lines_by_session.items()):
             s_date, school_name = session_meta[slot_id]
-            meal_base = sum(menu[item]["price_cents"] for _, item in lines)
+            meal_base = sum(menu[item]["price_cents"] for _, item, _ in lines)
             session_cost = _gst_normalise(
                 meal_base + delivery_fee,
                 includes_gst=includes_gst, gst_rate_percent=gst_rate,
@@ -1093,7 +1277,7 @@ def _persist_caterer_week(
                 INSERT INTO order_lines (order_id, enrolment_id, menu_item_id, source)
                 VALUES (%s, %s, %s, %s)
                 """,
-                [(order_id, eid, item, line_sources[eid]) for eid, item in lines],
+                [(order_id, eid, item, source) for eid, item, source in lines],
             )
             summaries.append(
                 SessionSummary(
@@ -1148,3 +1332,61 @@ def _persist_caterer_week(
         return unavailable(f"Database unavailable while persisting caterer {caterer_id}: {exc}")
     except psycopg.Error as exc:
         return error(f"Database error while persisting caterer {caterer_id}: {exc}")
+
+
+# --- Public helpers for the student choose-and-rate flow ---------------------
+# These read the SAME plan compose_week uses, so the options a student is offered
+# (and the pick-vs-fallback preview) are computed by exactly one algorithm.
+
+
+def plan_caterer_week_by_id(
+    caterer_id: int, week_of: date, run_id: int | None = None,
+    cache: dict | None = None,
+) -> CatererWeekPlan | ToolResult:
+    """``plan_caterer_week`` keyed by caterer id (loads the caterer first). Returns
+    the plan, or a typed failure (``error`` if no such active caterer).
+
+    ``cache`` is an OPTIONAL caller-owned dict memoising the (read-only, per-week
+    deterministic) plan by ``(caterer_id, week)`` — pass one when resolving many
+    students of the same caterer-week in a single operation (e.g. a weekly choice
+    send) so the caterer-week is gathered once, not once per student. It is scoped
+    to the caller (never a module global), so it can't go stale across the worker's
+    separate invocations."""
+    week_of = monday_of_week(week_of)
+    key = (caterer_id, week_of.isoformat())
+    if cache is not None and key in cache:
+        return cache[key]
+    caterers = _caterers(caterer_id)
+    if _failed(caterers):
+        return caterers
+    if not caterers:
+        return error(f"No active caterer {caterer_id} currently serving a school.")
+    plan = plan_caterer_week(caterers[0], week_of, run_id)
+    if cache is not None and not _failed(plan):
+        cache[key] = plan
+    return plan
+
+
+def assign_student(
+    plan: CatererWeekPlan, enrolment_id: int, forced_pick: int | None = None
+) -> list[tuple[int, int, str]] | None:
+    """Preview one safe student's assignment for the plan's week — PURE, no writes.
+
+    ``forced_pick`` (a menu_item_id) is applied to the student's NEXT upcoming
+    session this week — the same session the choose-and-rate email asks them to
+    pick for — and is honoured only when dietary-safe AND in the offered set (else
+    the student falls back, exactly as ``compose_week`` would). Returns
+    ``[(slot_id, item_id, source)]`` in session order, or ``None`` when the student
+    isn't a safe, orderable member of this caterer-week (escalated / not rostered).
+    """
+    if enrolment_id not in plan.safe_students:
+        return None
+    forced: dict[int, int] = {}
+    if forced_pick is not None:
+        order = sorted(
+            plan.student_sessions[enrolment_id],
+            key=lambda slot: (plan.session_meta[slot][0], slot),
+        )
+        if order:
+            forced = {order[0]: forced_pick}
+    return _assign_one(plan, enrolment_id, forced)

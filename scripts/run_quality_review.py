@@ -28,10 +28,12 @@ from __future__ import annotations
 
 import json
 import sys
+from datetime import date
 
 from config.settings import settings
 from src.agent.loop import run_incident
 from src.db.connection import fetch_all
+from src.tools import orders_batch
 
 # Reviewing four caterers — each a feedback read, a judgment, and possibly an
 # action (note, or draft-to-Dylan + escalate) — needs more reasoning turns than a
@@ -82,9 +84,16 @@ def build_task(weeks: int = _DEFAULT_WEEKS) -> str:
         "which are Dylan's call, never yours. Do NOT send a warning/rfp/cancellation "
         "yourself.\n"
         "  - If recalled lessons conflict on a caterer, escalate rather than pick.\n\n"
-        "Never knee-jerk a warning off one bad night. Finish with a short per-caterer "
-        "summary: the trend you saw and what you did (note / drafted-to-Dylan + "
-        "escalated / no action)."
+        "Never knee-jerk a warning off one bad night.\n\n"
+        "THEN, once you've reviewed everyone, send the warm weekly SCORECARDS in ONE "
+        f"call: send_caterer_weekly_summaries(week_of='{orders_batch.upcoming_monday(date.today()).isoformat()}'). "
+        "This sends one autonomous caterer_weekly_summary per caterer (praise-first, "
+        "per-school student satisfaction, recurring themes, a gentle service note, and "
+        "a capacity ask only for a clean strong performer) — idempotent, so a re-run "
+        "sends none. It is SEPARATE from any decline escalation above: a scorecard is "
+        "never a warning. Assess its result and HOLD + escalate if any send failed.\n\n"
+        "Finish with a short per-caterer summary: the trend you saw, what you did "
+        "(note / drafted-to-Dylan + escalated / no action), and that the scorecards went out."
     )
 
 

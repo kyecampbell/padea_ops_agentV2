@@ -134,6 +134,7 @@ COMMENT ON TABLE public.escalation_status IS 'Lookup (NEW): lifecycle status of 
 INSERT INTO public.email_type (code, label, description, sort_order) VALUES
     ('session_order',                 'Session order',                 'Per-session order to caterer (binding)',                    10),
     ('weekly_consolidated_summary',   'Weekly consolidated summary',   'Per-caterer Monday consolidated summary',                   20),
+    ('caterer_weekly_summary',        'Caterer weekly summary',        'Warm Monday per-caterer quality scorecard: praise + per-school student satisfaction + recurring themes + gentle service note + capacity ask; autonomous', 25),
     ('warning',                       'Warning',                       'Decline-detection warning to incumbent caterer',            30),
     ('rfp',                           'RFP',                           'Request for proposal to candidate caterers',                40),
     ('cancellation',                  'Cancellation',                  'Cancellation notice to outgoing caterer',                   50),
@@ -141,6 +142,7 @@ INSERT INTO public.email_type (code, label, description, sort_order) VALUES
     ('parent_enrolment',              'Parent enrolment',              'Term-start enrolment email to parent',                      70),
     ('parent_reminder',               'Parent reminder',               'Chase reminder to parent',                                  80),
     ('parent_prefs_request',          'Parent preferences request',    'One-time request to a parent for the student''s meal preferences', 85),
+    ('student_meal_choice',           'Student meal choice',           'Weekly choose-and-rate email to a student: rate last week + pick this week from MOQ-bounded, dietary-safe options; autonomous', 87),
     ('opt_back_in_request_to_parent', 'Opt back-in request to parent', 'Tutor-triggered opt-back-in request (autonomous)',          90),
     ('operator_notification',         'Operator notification',         'System-to-operator escalation notice',                     100),
     ('other',                         'Other',                         'Uncategorised',                                            110)
@@ -164,7 +166,8 @@ ON CONFLICT (code) DO NOTHING;
 
 INSERT INTO public.feedback_source (code, label, description, sort_order) VALUES
     ('tutor',   'Tutor',   'Per-meal feedback from the session tutor',     10),
-    ('manager', 'Manager', 'Per-order feedback from the session manager',  20)
+    ('manager', 'Manager', 'Per-order feedback from the session manager',  20),
+    ('student', 'Student', 'Per-meal rating + comment submitted by the student in the weekly choose-and-rate email', 30)
 ON CONFLICT (code) DO NOTHING;
 
 INSERT INTO public.inbound_classification (code, label, description, sort_order) VALUES
@@ -172,6 +175,7 @@ INSERT INTO public.inbound_classification (code, label, description, sort_order)
     ('caterer_order_confirmation',         'Caterer order confirmation',         'Caterer confirming an order',               20),
     ('caterer_price_change_notification',  'Caterer price change notification',  'Caterer notifying a price change',          30),
     ('parent_enrolment_response',          'Parent enrolment response',          'Parent responding to an enrolment email',   40),
+    ('student_meal_choice',                'Student meal choice',                'Student replying to the weekly choose-and-rate email with their meal pick + rating', 45),
     ('unclassified',                       'Unclassified',                       'Could not be classified',                   50)
 ON CONFLICT (code) DO NOTHING;
 
@@ -294,6 +298,7 @@ CREATE TABLE public.enrolments (
     parent_name                 text            NOT NULL,
     parent_email                text            NOT NULL,
     parent_phone                text,
+    student_email               text,
     original_start_date         date            NOT NULL,
     current_period_start_date   date            NOT NULL,
     current_period_end_date     date,
@@ -303,6 +308,7 @@ CREATE TABLE public.enrolments (
     updated_at                  timestamptz     NOT NULL DEFAULT now()
 );
 COMMENT ON TABLE public.enrolments IS 'Student-at-school with denormalised student+parent identity and three-date lifecycle. dietary_raw = the verbatim dietary string; tags are derived from it into enrolment_dietary_tags.';
+COMMENT ON COLUMN public.enrolments.student_email IS 'The student''s own contact for the weekly choose-and-rate email. NULL/blank = not emailed; the student falls back to compose-time assignment.';
 
 CREATE TABLE public.enrolment_dietary_tags (
     enrolment_id    bigint          NOT NULL REFERENCES public.enrolments(id),

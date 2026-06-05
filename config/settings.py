@@ -107,6 +107,10 @@ class Settings(BaseSettings):
     quality_review_day: str = "mon"
     quality_review_hour: int = 8
     quality_review_minute: int = 0
+    # How often the data-driven student choose-and-rate sweep ticks. Each tick sends
+    # any session whose dinner_time just passed (within misfire_grace_seconds), so a
+    # tighter interval fires each session closer to its actual dinner time.
+    session_choice_sweep_minutes: int = 10
     # How late a fire may run after its scheduled time and still execute (vs. being
     # dropped as a misfire) — covers a long-running job or a worker restart.
     misfire_grace_seconds: int = 3600

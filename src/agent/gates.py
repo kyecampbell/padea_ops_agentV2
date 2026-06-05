@@ -48,6 +48,19 @@ _TOOL_ACTION_CLASS: dict[str, ActionClass] = {
     # --- Write tools that are autonomous (recording a fact, reversible) ---
     "update_menu_item_description": "autonomous",  # records a caterer's clarification.
     "recompute_eligible_meals": "autonomous",      # idempotent dietary-safety recompute.
+    # Reading a student's weekly choose-and-rate options is a read; recording their
+    # RATING is a benign, reversible fact (feedback). (Recording their PICK is
+    # order-sensitive — see _ORDER_SENSITIVE — because it changes the upcoming
+    # meal, free before that session's order is sent, approval-gated after.)
+    "identify_choice_reply": "autonomous",
+    "get_student_choice_options": "autonomous",
+    "record_student_meal_rating": "autonomous",
+    # The Monday quality scorecard: a read of one caterer's week, and the
+    # deterministic idempotent send of the warm per-caterer scorecards. The summary
+    # kind is autonomous (factual appraisal, real numbers); the commercial-intent
+    # backstop still scans each body so it can't drift into a warning/RFP/price.
+    "get_caterer_weekly_summary": "autonomous",
+    "send_caterer_weekly_summaries": "autonomous",
     # The Thursday-batch calculator: read/compute that composes the safe order and
     # raises its own escalations. Idempotent per (caterer, week); a re-run replaces
     # rather than duplicates. The binding step is the order EMAIL (gated per kind),
@@ -84,6 +97,10 @@ _ORDER_SENSITIVE: frozenset[str] = frozenset(
     {
         "update_term_meal_preference",
         "record_dietary_update",
+        # A student's weekly PICK changes the meal for their upcoming session:
+        # free to record while no binding order has been sent for it, approval-gated
+        # once it has (same money line as a preference/dietary change).
+        "record_student_meal_choice",
     }
 )
 
@@ -149,6 +166,13 @@ _EMAIL_ACTION_CLASS: dict[str, ActionClass] = {
     # order is sent are still order-sensitive and gated.)
     "session_order": "autonomous",                       # binding order off a vetted batch.
     "weekly_consolidated_summary": "autonomous",         # consolidated finance summary.
+    # The warm Monday per-caterer quality scorecard. A factual appraisal tied to real
+    # numbers (praise + per-school student satisfaction + a gentle service note),
+    # NOT a fresh commercial judgment — hence autonomous. A formal quality WARNING /
+    # RFP / cancellation stays requires_approval above, and the commercial-intent
+    # backstop still scans this kind's content, so a summary can never drift into a
+    # warning / termination / price change and auto-send.
+    "caterer_weekly_summary": "autonomous",
     # --- Factual / operational — autonomous. ---
     # A polite, low-stakes service note to a caterer about a minor, fixable issue
     # (a cold or late delivery, a one-off mix-up). It is NOT a commercial/relational
@@ -159,6 +183,7 @@ _EMAIL_ACTION_CLASS: dict[str, ActionClass] = {
     "parent_enrolment": "autonomous",                    # term-start enrolment email.
     "parent_reminder": "autonomous",                     # chase reminder to a parent.
     "parent_prefs_request": "autonomous",                # one-time meal-preferences request.
+    "student_meal_choice": "autonomous",                 # weekly choose-and-rate email to a student.
     "opt_back_in_request_to_parent": "autonomous",       # tutor-triggered opt-back-in.
     "operator_notification": "autonomous",               # system-to-operator notice.
     "other": "autonomous",                               # uncategorised factual mail.

@@ -22,10 +22,11 @@ dispatch.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from typing import Any, Callable
 
 from src.tools import (
+    caterer_quality_summary,
     eligible_pool,
     email,
     escalate,
@@ -33,9 +34,10 @@ from src.tools import (
     orders_batch,
     parent_prefs,
     query,
+    student_choice,
     writes,
 )
-from src.tools.results import ToolResult, error
+from src.tools.results import ToolResult, error, found
 
 # --- Tool definition ---------------------------------------------------------
 
@@ -149,6 +151,83 @@ def _send_caterer_orders_tool(week_of: str, run_id: int | None = None) -> ToolRe
     if isinstance(wk, ToolResult):
         return wk
     return order_email.send_caterer_orders(wk, run_id=run_id)
+
+
+def _options_result(opts) -> ToolResult:
+    """Wrap a ``ChoiceOptions`` in a typed ``found`` (the agent reads ``data``)."""
+    if not opts.has_options:
+        return found(
+            opts.as_dict(),
+            f"{opts.student_name} has no safe offered options this week ({opts.reason}); "
+            "do not assign a meal — confirm or let them fall back.",
+        )
+    return found(
+        opts.as_dict(),
+        f"{opts.student_name} (enrolment {opts.enrolment_id}): {len(opts.options)} safe "
+        f"option(s) for {opts.upcoming_session_date}"
+        + (f"; last week's meal was {opts.last_meal.item}." if opts.last_meal else "; no meal last week."),
+    )
+
+
+def _identify_choice_reply_tool(subject: str = "", body: str = "") -> ToolResult:
+    """Tool adapter: deterministically resolve a choose-and-rate reply to the student
+    (via the reference token) and return their numbered options. A ``conflict`` (no
+    token) tells the agent to fall back to identifying the student from the body.
+    """
+    opts = student_choice.identify_reply(subject, body)
+    if isinstance(opts, ToolResult):
+        return opts
+    return _options_result(opts)
+
+
+def _get_caterer_weekly_summary_tool(caterer_id: int) -> ToolResult:
+    """Tool adapter: one caterer's Monday quality scorecard DATA + the rendered draft
+    (warm partner scorecard). Read-only — the agent reviews per-school student
+    satisfaction, the noise-filtered recurring themes, reliability signals, and the
+    strong-performer / concern flags before the deterministic send."""
+    week = orders_batch.upcoming_monday(date.today()) - timedelta(days=7)
+    data = caterer_quality_summary.summary_data(caterer_id, week)
+    if isinstance(data, ToolResult):
+        return data
+    rendered = caterer_quality_summary.render_caterer_weekly_summary(caterer_id, week)
+    if isinstance(rendered, ToolResult):
+        return rendered
+    subject, body = rendered
+    payload = data.as_dict()
+    payload["draft_subject"] = subject
+    payload["draft_body"] = body
+    return found(
+        payload,
+        f"{data.caterer_name}: overall {data.overall_avg}/5 across {data.overall_count} "
+        f"student ratings; {len(data.themes)} recurring theme(s), "
+        f"{len(data.dropped_noise)} one-off(s) filtered; "
+        f"{'strong performer' if data.strong_performer else 'not a capacity-ask candidate'}.",
+    )
+
+
+def _send_caterer_weekly_summaries_tool(week_of: str, run_id: int | None = None) -> ToolResult:
+    """Tool adapter: send ONE warm quality scorecard per caterer with student ratings
+    for the week (idempotent, autonomous). Never per-caterer looping by hand — this
+    is the single send path. Returns caterers sent / skipped / failed."""
+    wk = _parse_week(week_of)
+    if isinstance(wk, ToolResult):
+        return wk
+    return caterer_quality_summary.send_caterer_weekly_summaries(wk, run_id=run_id)
+
+
+def _get_student_choice_options_tool(enrolment_id: int) -> ToolResult:
+    """Tool adapter: the student's numbered choose-and-rate options for the upcoming
+    week — their dietary-safe, MOQ-bounded menu for the next session, the session
+    being chosen for, and the meal they had last week (the one to rate). Read-only;
+    the agent uses the numbers to map a reply's pick to a menu_item_id.
+    """
+    opts = student_choice.build_choice_options(enrolment_id, student_choice.upcoming_week())
+    if isinstance(opts, ToolResult):
+        return opts
+    # A clean, typed signal rather than an error when there are no options: this
+    # student has nothing safe to offer this week (escalated / blank dietary / no
+    # caterer) — the agent should fall back or confirm, never invent a meal.
+    return _options_result(opts)
 
 
 # --- Registry (the full tool belt) -------------------------------------------
@@ -425,6 +504,119 @@ _TOOLS: tuple[Tool, ...] = (
             "week_of": {
                 "type": "string",
                 "description": "The Monday of the target week as an ISO date (YYYY-MM-DD).",
+            },
+        },
+        required=("week_of",),
+        context_args=(("run_id", "run_id"),),
+    ),
+    # --- Weekly student choose-and-rate (inbound reply handling) -------------
+    Tool(
+        name="identify_choice_reply",
+        description=(
+            "Attribute a student's choose-and-rate REPLY to the correct student + "
+            "session, deterministically, from the reference token (PADEA-CHOICE-<id>-"
+            "<week>) carried in the email subject/body. Returns that student's numbered "
+            "safe options + last week's meal — exactly like get_student_choice_options, "
+            "but resolved from the reply itself. ALWAYS use this FIRST on a "
+            "choose-and-rate reply: every student shares one demo inbox, so the From "
+            "address is NOT an identity signal and you must match on the token, never "
+            "guess by sender or pick 'the first open request'. If it returns a conflict "
+            "(no token found), fall back to identifying the student from the body."
+        ),
+        func=_identify_choice_reply_tool,
+        parameters={
+            "subject": {"type": "string", "description": "The reply email's full subject line (incl. any 'Re:')."},
+            "body": {"type": "string", "description": "The reply email's full body (incl. any quoted original)."},
+        },
+        required=("subject", "body"),
+    ),
+    Tool(
+        name="get_student_choice_options",
+        description=(
+            "Fetch a student's weekly CHOOSE-AND-RATE options for the upcoming week: "
+            "the NUMBERED list of dietary-safe, MOQ-bounded meals they may pick from "
+            "for their next session (offered set ∩ their safe pool — every option is "
+            "safe and within the variety ceiling), the session date being chosen for, "
+            "and the meal they had LAST week (the one they're rating). Use this when a "
+            "student replies to a choose-and-rate email: map their stated number/meal "
+            "to a menu_item_id here BEFORE recording the pick. If it returns no "
+            "options, do NOT assign a meal — let them fall back or confirm."
+        ),
+        func=_get_student_choice_options_tool,
+        parameters=_id_param("enrolment"),
+        required=("enrolment_id",),
+    ),
+    Tool(
+        name="record_student_meal_choice",
+        description=(
+            "Record a student's weekly PICK (from their choose-and-rate reply) as a "
+            "one-off meal request for their upcoming session. The menu_item_id MUST be "
+            "one of their safe options from get_student_choice_options — an ineligible "
+            "or off-menu pick is rejected (conflict), so you never assign an unsafe "
+            "meal (fall back or ask instead). The Thursday batch then prefers this pick "
+            "over the usual rotation/default. Changing the pick after that session's "
+            "order has been sent requires operator approval."
+        ),
+        func=student_choice.record_meal_choice,
+        parameters={
+            "enrolment_id": {"type": "integer", "description": "The enrolment id (integer)."},
+            "menu_item_id": {
+                "type": "integer",
+                "description": "The picked meal's menu_item_id (must be one of the student's safe options).",
+            },
+        },
+        required=("enrolment_id", "menu_item_id"),
+    ),
+    Tool(
+        name="record_student_meal_rating",
+        description=(
+            "Record a student's RATING (1-5) and optional free-text comment of last "
+            "week's meal, from their choose-and-rate reply, as student feedback. Feeds "
+            "the same caterer quality signal as tutor/manager feedback. Autonomous "
+            "(recording a fact). Links last week's meal automatically when there is one."
+        ),
+        func=student_choice.record_meal_rating,
+        parameters={
+            "enrolment_id": {"type": "integer", "description": "The enrolment id (integer)."},
+            "rating": {"type": "integer", "description": "The student's rating, 1 (poor) to 5 (great)."},
+            "comment": {"type": "string", "description": "The student's free-text comment (optional)."},
+        },
+        required=("enrolment_id", "rating"),
+    ),
+    # --- Weekly per-caterer quality scorecard --------------------------------
+    Tool(
+        name="get_caterer_weekly_summary",
+        description=(
+            "Fetch one caterer's Monday QUALITY SCORECARD data + a rendered draft: "
+            "meals served, STUDENT satisfaction per school (with standout + soft "
+            "spot) and overall, the RECURRING student themes (one-off noise already "
+            "filtered out), the four manager reliability signals (on-time / counts / "
+            "dietary / temperature, with failed counts), and whether they're a clean "
+            "strong performer. Read-only. Use it to review a caterer's week before "
+            "the scorecards go out."
+        ),
+        func=_get_caterer_weekly_summary_tool,
+        parameters=_id_param("caterer"),
+        required=("caterer_id",),
+    ),
+    Tool(
+        name="send_caterer_weekly_summaries",
+        description=(
+            "Send the warm weekly quality SCORECARD to every caterer with student "
+            "ratings for the week — ONE per caterer, idempotent (a re-run sends 0). "
+            "Each is a partner scorecard: genuine specific praise first, per-school "
+            "student satisfaction, the recurring themes behind it, a gentle service "
+            "note from manager reliability, and a capacity ask only for a clean "
+            "strong performer. Autonomous (a factual appraisal tied to real numbers); "
+            "a formal warning / RFP / cancellation is NOT this — those stay operator- "
+            "gated. Returns caterers sent / skipped (with reasons) / failed; assess "
+            "the result and HOLD + escalate if anything failed."
+        ),
+        func=_send_caterer_weekly_summaries_tool,
+        parameters={
+            "week_of": {
+                "type": "string",
+                "description": "The Monday of the week to summarise as an ISO date (YYYY-MM-DD).",
             },
         },
         required=("week_of",),

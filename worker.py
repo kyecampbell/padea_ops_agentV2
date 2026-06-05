@@ -42,11 +42,12 @@ import signal
 import sys
 import threading
 import time
-from datetime import date
+from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 
 from config.settings import settings
 from scripts.run_inbox_once import report_processed
@@ -57,7 +58,7 @@ from scripts.run_quality_review import (
 )
 from scripts.run_thursday_incident import _CALL_CAP as THURSDAY_CALL_CAP, _task as thursday_task
 from src.agent.loop import run_incident
-from src.tools import orders_batch
+from src.tools import orders_batch, student_choice
 from src.tools.inbound import poll_inbox, poll_topology
 
 logging.basicConfig(
@@ -94,6 +95,21 @@ def _run_quality_review() -> None:
         "scheduler: quality review done — run %s, %s step(s)",
         result.run_id, result.step_count,
     )
+
+
+def _run_session_choice_sweep() -> None:
+    """The data-driven student choose-and-rate sweep, as the scheduler ticks it.
+
+    Sends choice emails for any session whose dinner_time just passed (within the
+    misfire grace window). Idempotent per (student, target-week), so frequent ticks
+    and restarts never double-send. EMAIL_MODE governs delivery (demo-routed)."""
+    now = datetime.now(ZoneInfo(settings.scheduler_timezone))
+    try:
+        result = student_choice.run_due_session_choice_sends(now)
+    except Exception:  # a sweep hiccup must not kill the scheduler thread.
+        logger.exception("scheduler: session choice sweep failed; will retry next tick")
+        return
+    logger.info("scheduler: session choice sweep — %s", result.message)
 
 
 def build_scheduler() -> BackgroundScheduler:
@@ -134,6 +150,13 @@ def build_scheduler() -> BackgroundScheduler:
         ),
         id="weekly_quality_review",
         name="Weekly quality review",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        _run_session_choice_sweep,
+        IntervalTrigger(minutes=settings.session_choice_sweep_minutes, timezone=tz),
+        id="session_choice_sweep",
+        name="Student choose-and-rate dinner-time sweep",
         replace_existing=True,
     )
     return scheduler
