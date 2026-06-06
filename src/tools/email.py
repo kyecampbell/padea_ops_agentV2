@@ -67,6 +67,34 @@ def _failed(value: Any) -> bool:
     return isinstance(value, ToolResult)
 
 
+# --- Outbound signature -------------------------------------------------------
+# Every agent email — originated (send_email) or a reply (send_reply) — closes
+# with the same two-line TEXT signature. No image: WebP isn't reliable in email
+# clients and we never add weight to the send path. Applied centrally so EVERY
+# outbound body is signed consistently, and idempotent so a body that already
+# carries it (the templated builders, or a reply the model signed itself) is left
+# untouched rather than double-signed.
+
+_SIGNATURE_TAGLINE = "Structure and Support Study"
+_SIGNATURE = f"Padea Operations\n{_SIGNATURE_TAGLINE}"
+
+
+def _ensure_signature(body: str) -> str:
+    """Return ``body`` closed with the standard Padea sign-off, exactly once.
+
+    - Tagline already present anywhere → returned unchanged (idempotent).
+    - Body already ends on a bare "Padea Operations" line → append the tagline
+      directly beneath it (upgrades an older one-line sign-off).
+    - Otherwise → append the full two-line signature after a blank line.
+    """
+    text = (body or "").rstrip()
+    if _SIGNATURE_TAGLINE in text:
+        return text
+    if text.endswith("Padea Operations"):
+        return f"{text}\n{_SIGNATURE_TAGLINE}"
+    return f"{text}\n\n{_SIGNATURE}" if text else _SIGNATURE
+
+
 # --- Demo-mode redirection ----------------------------------------------------
 
 
@@ -224,6 +252,7 @@ def send_email(
     # that has no entities.
     subject = html.unescape(subject)
     body = html.unescape(body)
+    body = _ensure_signature(body)
 
     # Drop any dangling cross-link BEFORE we send, so a bad related id can never
     # turn a successful send into a logging failure (which would invite a retry
@@ -433,6 +462,7 @@ def send_reply(
 
     subject = html.unescape(subject)
     body = html.unescape(body)
+    body = _ensure_signature(body)
     sanitised = _sanitise_related_ids(
         {
             "related_caterer_id": related_caterer_id,

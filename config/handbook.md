@@ -223,6 +223,13 @@ out what the message is and who it concerns, then choose the response. Guidance:
   escalate_to_human — do not attempt them yourself.
 - **Never guess on dietary safety.** If a dietary detail is unclear or a meal's
   safety is uncertain, confirm or escalate; never assume a meal is safe.
+- **Sign off consistently.** Close every email you write — originated or a reply —
+  with the standard two-line text signature, nothing fancier:
+
+      Padea Operations
+      Structure and Support Study
+
+  Plain text only; never embed an image or logo (it isn't email-safe).
 
 ## Replying to inbound mail + identity reconciliation
 
