@@ -1025,7 +1025,7 @@ def _compose_caterer_week(caterer: dict, week_of: date, run_id: int | None) -> d
     )
 
     # --- Persist (idempotent; writes per-student escalations, clears stale ones). ---
-    session_summaries, cwo_id = _persist_caterer_week(
+    persisted = _persist_caterer_week(
         caterer=caterer, week_of=week_of, run_id=run_id,
         slot_ids=plan.slot_ids, session_dates=plan.session_dates,
         lines_by_session=lines_by_session,
@@ -1035,8 +1035,9 @@ def _compose_caterer_week(caterer: dict, week_of: date, run_id: int | None) -> d
         gst_rate=plan.gst_rate, includes_gst=plan.includes_gst, delivery_fee=plan.delivery_fee,
         stragglers=plan.stragglers,
     )
-    if _failed(session_summaries):
-        return session_summaries
+    if _failed(persisted):  # persist returns a ToolResult on DB failure — check before unpacking.
+        return persisted
+    session_summaries, cwo_id = persisted
 
     # Meal-by-meal breakdown for the order email: distinct item -> total qty,
     # most-ordered first (ties by name for a stable, readable order).
