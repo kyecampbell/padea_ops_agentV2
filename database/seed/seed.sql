@@ -7285,7 +7285,7 @@ INSERT INTO student_eligible_meals (enrolment_id, menu_item_id, eligible, needs_
 -- opt_back_in_requests: 0 row(s)
 
 -- agent_runs: 1 row(s)
-INSERT INTO agent_runs (id, started_at, completed_at, trigger_reason, notes) VALUES
+INSERT INTO agent_runs (id, started_at, completed_at, trigger_reason, notes, task, parent_run_id, feedback_depth) VALUES
 (1, '2026-06-05 04:30:08.678195+00:00'::timestamptz, '2026-06-05 04:31:57.622564+00:00'::timestamptz, 'thursday_batch', '✅ **Step 4 PASSED.** All 4 caterer order emails sent successfully. 0 skipped, 0 failed.
 
 ---
@@ -7299,7 +7299,7 @@ INSERT INTO agent_runs (id, started_at, completed_at, trigger_reason, notes) VAL
 | 3. Prefs requests | `send_prefs_requests` | ✅ 0 sent, 0 skipped (no defaulted students) |
 | 4. Caterer orders | `send_caterer_orders` | ✅ 4 sent (Lakehouse Victoria Point, Terrific Noodles, Kenko Sushi House, Guzman y Gomez), 0 skipped, 0 failed |
 
-**Nothing held, nothing escalated.** The week of 2026-06-08 is fully batched — all orders are in, all 373 student meals across 11 sessions are safely covered, and all caterers have their order emails.');
+**Nothing held, nothing escalated.** The week of 2026-06-08 is fully batched — all orders are in, all 373 student meals across 11 sessions are safely covered, and all caterers have their order emails.', NULL, NULL, 0);
 
 -- agent_steps: 4 row(s)
 INSERT INTO agent_steps (id, run_id, step_index, tool_name, tool_input, tool_output_full, reasoning, urgency, confidence, action_class, created_at) VALUES

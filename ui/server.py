@@ -50,7 +50,6 @@ from src.tools import casebook
 from src.tools import email as email_tool
 from src.tools import policybook
 from src.tools import writes
-from src.tools.casebook import store_case
 from src.tools.eligible_pool import recompute_eligible_meals
 
 app = Flask(__name__)
@@ -233,7 +232,10 @@ def _open_escalations() -> list[dict]:
 
 
 def _pending_writes() -> list[dict]:
-    """Requires-approval write proposals that were logged but not yet applied."""
+    """Requires-approval write proposals that were logged but not yet applied.
+
+    A proposal the operator rejected (superseded by a feedback re-run) is excluded
+    — the corrected write is re-proposed as a fresh pending row."""
     return _fetch(
         """
         SELECT id, run_id, step_index, tool_name, tool_input
@@ -241,6 +243,7 @@ def _pending_writes() -> list[dict]:
         WHERE action_class = 'requires_approval'
           AND tool_name = ANY(%s)
           AND COALESCE(tool_output_full->'data'->>'applied', 'false') = 'false'
+          AND COALESCE(tool_output_full->'data'->>'superseded', 'false') = 'false'
         ORDER BY id DESC
         """,
         (list(_APPLYABLE_WRITE_TOOLS),),
@@ -671,7 +674,8 @@ def apply_write(step_id: int):
     step = _fetch_one(
         """
         SELECT id, run_id, tool_name, tool_input, action_class, tool_output_full,
-               COALESCE(tool_output_full->'data'->>'applied', 'false') AS applied
+               COALESCE(tool_output_full->'data'->>'applied', 'false')    AS applied,
+               COALESCE(tool_output_full->'data'->>'superseded', 'false') AS superseded
         FROM agent_steps
         WHERE id = %s
         """,
@@ -685,6 +689,9 @@ def apply_write(step_id: int):
         return redirect(url_for("index"))
     if step["applied"] == "true":
         flash(f"Step {step_id} was already applied.", "error")
+        return redirect(url_for("index"))
+    if step["superseded"] == "true":
+        flash(f"Step {step_id} was rejected and superseded by a re-run; not applying.", "error")
         return redirect(url_for("index"))
 
     # Re-dispatch the proposed write from its logged tool_name + tool_input. This
@@ -813,25 +820,18 @@ def comment():
         flash("A comment must target a run or a step.", "error")
         return redirect(url_for("index"))
 
-    # 1) Record the operator's annotation against the run/step.
+    # Record the comment as UN-ACTIONED feedback (handled_at NULL). The feedback
+    # sweep (src/agent/feedback.py) then classifies its intent and routes it:
+    # re-run the task (instruction / rejection-with-explanation), store a lesson
+    # (lesson / both), or escalate (unclear). Lesson capture is therefore
+    # intent-gated by the sweep, not eager here — so a pure instruction no longer
+    # leaves a spurious lesson behind.
     _insert_annotation(step_id, run_id, comment_text, actor)
-
-    # 2) Train the case-book: turn the comment into a retrievable case.
-    situation, tags, related = _case_from_target(run_id, step_id)
-    case = store_case(
-        situation=situation,
-        decision=comment_text,
-        rationale="Operator feedback captured via the decision UI.",
-        tags=tags,
-        related_run_id=related.get("run_id"),
-        related_caterer_id=related.get("caterer_id"),
-        related_enrolment_id=related.get("enrolment_id"),
-        created_by=actor,
+    flash(
+        "Feedback captured. The agent will review it on the next sweep — acting "
+        "on an instruction/rejection, recording a lesson, or asking if it's unclear.",
+        "success",
     )
-    if case.ok:
-        flash(f"Comment saved and stored as case {case.data['case_id']}.", "success")
-    else:
-        flash(f"Comment saved, but storing the case failed: {case.message}", "error")
     return redirect(url_for("index"))
 
 
@@ -845,71 +845,6 @@ def _insert_annotation(step_id: int | None, run_id: int | None, comment: str, au
             (step_id, run_id, comment, author),
         )
         conn.commit()
-
-
-def _case_from_target(run_id: int | None, step_id: int | None) -> tuple[str, list[str], dict]:
-    """Build the case ``situation`` + tags + related ids from the commented item.
-
-    The operator's comment is the case's *decision* (their guidance); this is the
-    *situation* it applies to — what the agent was doing when commented on.
-    """
-    tags = ["operator-feedback"]
-    related: dict[str, int] = {}
-
-    if step_id is not None:
-        step = _fetch_one(
-            """
-            SELECT s.id, s.run_id, s.tool_name, s.action_class,
-                   s.tool_input,
-                   s.tool_output_full->>'status' AS status,
-                   r.trigger_reason
-            FROM agent_steps s
-            JOIN agent_runs r ON r.id = s.run_id
-            WHERE s.id = %s
-            """,
-            (step_id,),
-        )
-        if step:
-            related["run_id"] = step["run_id"]
-            if step["tool_name"]:
-                tags.append(step["tool_name"])
-            _harvest_related_ids(step.get("tool_input"), related)
-            situation = (
-                f"Run {step['run_id']} (trigger: {step['trigger_reason']}), "
-                f"step '{step['tool_name']}' [{step['action_class']}] -> {step['status']}."
-            )
-            return situation, tags, related
-
-    if run_id is not None:
-        run = _fetch_one(
-            "SELECT id, trigger_reason, notes FROM agent_runs WHERE id = %s",
-            (run_id,),
-        )
-        if run:
-            related["run_id"] = run["id"]
-            decision = (run["notes"] or "").strip()
-            situation = f"Run {run['id']} (trigger: {run['trigger_reason']})."
-            if decision:
-                situation += f" Final decision: {decision[:300]}"
-            return situation, tags, related
-
-    return "Operator comment via the decision UI.", tags, related
-
-
-def _harvest_related_ids(tool_input: Any, related: dict) -> None:
-    """Pull enrolment/caterer ids out of a step's tool_input, if present."""
-    if not isinstance(tool_input, dict):
-        return
-    if "enrolment_id" in tool_input and tool_input["enrolment_id"] is not None:
-        try:
-            related["enrolment_id"] = int(tool_input["enrolment_id"])
-        except (TypeError, ValueError):
-            pass
-    if "caterer_id" in tool_input and tool_input["caterer_id"] is not None:
-        try:
-            related["caterer_id"] = int(tool_input["caterer_id"])
-        except (TypeError, ValueError):
-            pass
 
 
 if __name__ == "__main__":

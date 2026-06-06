@@ -117,7 +117,7 @@ EPHEMERAL_TABLES: tuple[str, ...] = (
 PRESERVE_TABLES: tuple[str, ...] = ("cases", "decision_annotations")
 PRESERVE_NULL_FKS: dict[str, tuple[str, ...]] = {
     "cases": ("related_run_id", "related_caterer_id", "related_enrolment_id"),
-    "decision_annotations": ("step_id", "run_id"),
+    "decision_annotations": ("step_id", "run_id", "redo_run_id"),
 }
 
 _BATCH = 100  # rows per multi-row INSERT in the captured seed file.

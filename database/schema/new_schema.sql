@@ -154,7 +154,8 @@ INSERT INTO public.email_status (code, label, description, sort_order) VALUES
     ('approved',             'Approved',             'Operator approved; ready to send',                  30),
     ('sending',              'Sending',              'Send in progress',                                  40),
     ('sent',                 'Sent',                 'Successfully sent via Gmail',                       50),
-    ('failed',               'Failed',               'Send attempt failed',                               60)
+    ('failed',               'Failed',               'Send attempt failed',                               60),
+    ('rejected',             'Rejected',             'Operator rejected the queued draft; superseded by a feedback re-run', 70)
 ON CONFLICT (code) DO NOTHING;
 
 INSERT INTO public.step_urgency (code, label, description, sort_order) VALUES
@@ -519,9 +520,12 @@ CREATE TABLE public.agent_runs (
     started_at      timestamptz     NOT NULL DEFAULT now(),
     completed_at    timestamptz,
     trigger_reason  text            NOT NULL,
-    notes           text
+    notes           text,
+    task            text,
+    parent_run_id   bigint          REFERENCES public.agent_runs(id),
+    feedback_depth  integer         NOT NULL DEFAULT 0
 );
-COMMENT ON TABLE public.agent_runs IS 'One row per agent invocation (e.g. session_order_t72, monday_summary, manual).';
+COMMENT ON TABLE public.agent_runs IS 'One row per agent invocation (e.g. session_order_t72, monday_summary, manual). task = the prompt (replayed by feedback re-runs); parent_run_id/feedback_depth track the bounded redo chain.';
 
 CREATE TABLE public.agent_steps (
     id                  bigserial       PRIMARY KEY,
@@ -631,14 +635,21 @@ CREATE TABLE public.escalations (
 COMMENT ON TABLE public.escalations IS 'First-class escalation object. Resolutions feed student_eligible_meals (if dietary) and the case-book.';
 
 CREATE TABLE public.decision_annotations (
-    id          bigserial       PRIMARY KEY,
-    step_id     bigint          REFERENCES public.agent_steps(id),
-    run_id      bigint          REFERENCES public.agent_runs(id),
-    comment     text            NOT NULL,
-    author      text,
-    created_at  timestamptz     NOT NULL DEFAULT now()
+    id            bigserial       PRIMARY KEY,
+    step_id       bigint          REFERENCES public.agent_steps(id),
+    run_id        bigint          REFERENCES public.agent_runs(id),
+    comment       text            NOT NULL,
+    author        text,
+    created_at    timestamptz     NOT NULL DEFAULT now(),
+    -- Feedback-sweep handling state (src/agent/feedback.py). handled_at NULL =
+    -- un-actioned; claimed exactly once on handled_at so nothing is dropped/doubled.
+    intent        text,
+    handled_at    timestamptz,
+    outcome       text,
+    redo_run_id   bigint          REFERENCES public.agent_runs(id),
+    redo_attempts integer         NOT NULL DEFAULT 0
 );
-COMMENT ON TABLE public.decision_annotations IS 'Operator comments on any agent step/decision (the "comment on any of them" UI); feeds the case-book.';
+COMMENT ON TABLE public.decision_annotations IS 'Operator comments on any agent step/decision (the "comment on any of them" UI). The feedback sweep classifies intent and either re-runs the task (instruction/rejection), stores a lesson (lesson/both), or escalates (unclear); handled_at marks it processed exactly once.';
 
 -- Operator-authored authoritative policies (the editable BUSINESS-rule layer ON
 -- TOP of the handbook's hard invariants). Every ACTIVE policy is injected into

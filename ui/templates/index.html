@@ -36,6 +36,19 @@
               <button type="submit">Approve &amp; send</button>
             </form>
           </div>
+          {% if e.related_run_id %}
+            <details>
+              <summary>Reject &amp; explain → agent re-runs</summary>
+              <form method="post" action="{{ url_for('comment') }}">
+                <input type="hidden" name="run_id" value="{{ e.related_run_id }}">
+                <div class="field"><textarea name="comment" placeholder="Why this is wrong + what to do instead. The agent re-runs with your feedback; this draft won't be sent." required></textarea></div>
+                <div class="row">
+                  <input class="author" type="text" name="author" placeholder="your name" value="operator">
+                  <button type="submit">Reject &amp; send back to agent</button>
+                </div>
+              </form>
+            </details>
+          {% endif %}
         </div>
       {% endfor %}
     </div>
@@ -55,6 +68,20 @@
               <button type="submit">Approve &amp; apply</button>
             </form>
           </div>
+          {% if w.run_id %}
+            <details>
+              <summary>Reject &amp; explain → agent re-runs</summary>
+              <form method="post" action="{{ url_for('comment') }}">
+                <input type="hidden" name="run_id" value="{{ w.run_id }}">
+                <input type="hidden" name="step_id" value="{{ w.id }}">
+                <div class="field"><textarea name="comment" placeholder="Why this is wrong + what to do instead. The agent re-runs with your feedback; this write won't be applied." required></textarea></div>
+                <div class="row">
+                  <input class="author" type="text" name="author" placeholder="your name" value="operator">
+                  <button type="submit">Reject &amp; send back to agent</button>
+                </div>
+              </form>
+            </details>
+          {% endif %}
         </div>
       {% endfor %}
     </div>
@@ -117,11 +144,11 @@
               </div>
               {% if s.reasoning %}<div class="reason">{{ s.reasoning[:280] }}{% if s.reasoning|length > 280 %}…{% endif %}</div>{% endif %}
               <details>
-                <summary>comment on this step</summary>
+                <summary>comment / reject this step</summary>
                 <form method="post" action="{{ url_for('comment') }}">
                   <input type="hidden" name="step_id" value="{{ s.id }}">
                   <input type="hidden" name="run_id" value="{{ run.id }}">
-                  <div class="field"><textarea name="comment" placeholder="Operator note — trains the case-book…" required></textarea></div>
+                  <div class="field"><textarea name="comment" placeholder="Note or correction — the agent reviews it next sweep: acts on an instruction/rejection, records a lesson, or asks if unclear." required></textarea></div>
                   <div class="row">
                     <input class="author" type="text" name="author" value="operator">
                     <button type="submit">Comment &amp; teach</button>
@@ -179,7 +206,7 @@
       {% endif %}
 
       <details>
-        <summary>comment on this run</summary>
+        <summary>comment / correct this run</summary>
         <form method="post" action="{{ url_for('comment') }}">
           <input type="hidden" name="run_id" value="{{ run.id }}">
           <div class="field"><textarea name="comment" placeholder="Operator note — trains the case-book…" required></textarea></div>

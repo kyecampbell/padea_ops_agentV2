@@ -4,8 +4,9 @@ This is the cloud "worker" service (Render). It runs TWO things side by side in 
 single long-lived process:
 
   (a) the inbound INBOX POLL on an interval (``poll_interval_seconds`` from config),
-      reusing ``src.tools.inbound.poll_inbox`` — the same path the manual
-      ``scripts/run_inbox_once.py`` drives; and
+      reusing ``src.tools.inbound.poll_inbox``, and BESIDE it the operator-FEEDBACK
+      sweep (``src.agent.feedback.sweep_feedback``) — the same two work-check
+      triggers the manual ``scripts/run_inbox_once.py`` drives; and
   (b) an APScheduler firing the two WEEKLY incidents on cron triggers, in
       ``Australia/Brisbane``: the Thursday order run and the Monday quality review.
       Both go through ``loop.run_incident`` — identical to the manual
@@ -50,13 +51,14 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
 from config.settings import settings
-from scripts.run_inbox_once import report_processed
+from scripts.run_inbox_once import report_feedback, report_processed
 from scripts.run_quality_review import (
     TRIGGER_REASON as QUALITY_TRIGGER,
     _CALL_CAP as QUALITY_CALL_CAP,
     build_task as quality_task,
 )
 from scripts.run_thursday_incident import _CALL_CAP as THURSDAY_CALL_CAP, _task as thursday_task
+from src.agent.feedback import sweep_feedback
 from src.agent.loop import run_incident
 from src.tools import orders_batch, student_choice
 from src.tools.inbound import poll_inbox, poll_topology
@@ -186,6 +188,23 @@ def _poll_once() -> None:
         logger.info("inbox poll: nothing new")
 
 
+def _sweep_feedback_once() -> None:
+    """One operator-feedback sweep, beside the inbox poll — the second work-check
+    trigger. Surfaces any UN-ACTIONED operator comment and handles each exactly
+    once (re-run on an instruction/rejection, store a lesson, or escalate if
+    unclear). A failure is logged and retried next interval; it never kills the loop."""
+    try:
+        handled = sweep_feedback()
+    except Exception:  # a sweep hiccup must not stop the daemon.
+        logger.exception("feedback sweep failed; will retry next interval")
+        return
+    if handled:
+        logger.info("feedback sweep: %d operator comment(s) handled", len(handled))
+        report_feedback(handled)
+    else:
+        logger.info("feedback sweep: nothing un-actioned")
+
+
 def _install_signal_handlers() -> None:
     def _handle(signum, _frame):
         logger.info("received signal %s — shutting down", signum)
@@ -214,6 +233,7 @@ def selftest() -> int:
     """
     logger.info("worker selftest — EMAIL_MODE=%s", settings.email_mode)
     logger.info("inbox topology: %s", poll_topology())
+    logger.info("work-check triggers: inbox poll + operator-feedback sweep")
     scheduler = build_scheduler()
     # Start paused so next_run_time is computed but no job actually fires.
     scheduler.start(paused=True)
@@ -239,11 +259,13 @@ def main() -> int:
     scheduler.start()
     logger.info("scheduler started (tz=%s); weekly jobs:", settings.scheduler_timezone)
     _log_jobs(scheduler)
-    logger.info("inbox poll loop starting — every %ss (Ctrl-C / SIGTERM to stop)", interval)
+    logger.info("work-check loop starting — inbox poll + feedback sweep every %ss "
+                "(Ctrl-C / SIGTERM to stop)", interval)
 
     try:
         while not _shutdown.is_set():
             _poll_once()
+            _sweep_feedback_once()
             # Interruptible sleep: wake immediately on shutdown signal.
             _shutdown.wait(interval)
     finally:

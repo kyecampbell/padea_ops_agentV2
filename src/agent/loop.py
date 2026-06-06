@@ -154,12 +154,22 @@ def _result_payload(result: ToolResult) -> dict[str, Any]:
     return {"status": result.status, "message": result.message, "data": result.data}
 
 
-def _open_run(trigger_reason: str) -> int:
-    """Insert an `agent_runs` row and return its id."""
+def _open_run(
+    trigger_reason: str,
+    task: str | None = None,
+    parent_run_id: int | None = None,
+    feedback_depth: int = 0,
+) -> int:
+    """Insert an `agent_runs` row and return its id.
+
+    ``task`` is persisted so a feedback-driven re-run can faithfully replay the
+    original prompt; ``parent_run_id`` / ``feedback_depth`` record the re-run
+    lineage and bound the redo chain (see ``src.agent.feedback``)."""
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute(
-            "INSERT INTO agent_runs (trigger_reason) VALUES (%s) RETURNING id",
-            (trigger_reason,),
+            "INSERT INTO agent_runs (trigger_reason, task, parent_run_id, feedback_depth) "
+            "VALUES (%s, %s, %s, %s) RETURNING id",
+            (trigger_reason, task, parent_run_id, feedback_depth),
         )
         run_id = cur.fetchone()[0]
         conn.commit()
@@ -361,6 +371,8 @@ def _text_of(content: list[Any]) -> str:
 def run_incident(
     trigger_reason: str, task: str, call_cap: int | None = None,
     extra_context: dict[str, Any] | None = None,
+    parent_run_id: int | None = None,
+    feedback_depth: int = 0,
 ) -> RunResult:
     """Drive one incident to a final text answer.
 
@@ -374,8 +386,10 @@ def run_incident(
     ``extra_context`` adds ambient run context for tool ``context_args`` (e.g. the
     inbound sender's address, so the reply tool can route to the actual sender);
     it is merged with ``run_id`` and never exposed to the model.
+    ``parent_run_id`` / ``feedback_depth`` mark a feedback-driven re-run: the run it
+    corrects and its depth in the bounded redo chain (see ``src.agent.feedback``).
     """
-    run_id = _open_run(trigger_reason)
+    run_id = _open_run(trigger_reason, task, parent_run_id, feedback_depth)
     run_context: dict[str, Any] = {"run_id": run_id, **(extra_context or {})}
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
     schemas = tool_schemas()

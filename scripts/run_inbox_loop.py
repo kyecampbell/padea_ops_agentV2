@@ -1,8 +1,9 @@
-"""Continuously poll the inbox until Ctrl-C (local watch / lightweight daemon).
+"""Continuously run the work-check until Ctrl-C (local watch / lightweight daemon).
 
-Calls ``poll_inbox()`` every N seconds and prints each cycle's processed emails
-(reusing the per-email report from ``run_inbox_once``). New mail that arrives
-while this runs is handled automatically, cycle by cycle. Stop with Ctrl-C.
+Each cycle (every N seconds) runs both triggers: ``poll_inbox()`` for new mail and
+``sweep_feedback()`` for un-actioned operator feedback (reusing the per-item reports
+from ``run_inbox_once``). New mail and new operator comments that arrive while this
+runs are handled automatically, cycle by cycle. Stop with Ctrl-C.
 
 The interval N comes from runtime_config (``poll_interval_seconds``), defaulting
 to 30 if it is unset/invalid; an optional CLI argument overrides it:
@@ -18,7 +19,8 @@ import time
 from datetime import datetime, timezone
 
 from config.settings import settings
-from scripts.run_inbox_once import report_processed
+from scripts.run_inbox_once import report_feedback, report_processed
+from src.agent.feedback import sweep_feedback
 from src.tools.inbound import poll_inbox, poll_topology
 
 _DEFAULT_INTERVAL_SECONDS = 30
@@ -52,9 +54,14 @@ def main() -> int:
             cycle += 1
             stamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
             processed = poll_inbox()
-            if processed:
-                print(f"--- cycle {cycle} @ {stamp}: {len(processed)} new message(s) ---")
-                report_processed(processed)
+            handled_fb = sweep_feedback()
+            if processed or handled_fb:
+                print(f"--- cycle {cycle} @ {stamp}: "
+                      f"{len(processed)} new message(s), {len(handled_fb)} feedback item(s) ---")
+                if processed:
+                    report_processed(processed)
+                if handled_fb:
+                    report_feedback(handled_fb)
             else:
                 print(f"--- cycle {cycle} @ {stamp}: nothing new ---")
             time.sleep(interval)

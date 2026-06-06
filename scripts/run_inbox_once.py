@@ -1,13 +1,16 @@
-"""Run ONE inbound poll cycle (manual / cron entrypoint).
+"""Run ONE work-check cycle (manual / cron entrypoint).
 
-Polls the real inbox once via ``src.tools.inbound.poll_inbox``, letting the
-orchestrator reason about and handle each NEW message. For every message
-processed it prints the email, the agent's classification + related ids, the
-final decision text, and the tool steps the incident logged (so you can watch it
-identify, act/queue, reply-for-confirmation, or escalate). Already-seen messages
-are skipped silently (idempotent).
+The work-check has two triggers and runs them in order:
+  1. INBOUND mail — ``src.tools.inbound.poll_inbox`` reasons about and handles each
+     NEW message (identify, act/queue, reply-for-confirmation, or escalate).
+  2. UN-ACTIONED operator feedback — ``src.agent.feedback.sweep_feedback`` surfaces
+     any operator comment that hasn't been handled and processes each exactly once
+     (re-run on an instruction/rejection, store a lesson, or escalate if unclear).
 
-Exits non-zero if any message failed mid-processing.
+For each item it prints what was handled and the tool steps any incident logged.
+Already-seen messages and already-handled comments are skipped silently (idempotent).
+
+Exits non-zero if any item failed mid-processing.
 
 Run: uv run python scripts/run_inbox_once.py
 """
@@ -16,6 +19,7 @@ from __future__ import annotations
 
 import sys
 
+from src.agent.feedback import sweep_feedback
 from src.db.connection import fetch_all
 from src.tools.inbound import poll_inbox, poll_topology
 
@@ -70,18 +74,52 @@ def report_processed(processed: list) -> int:
     return failures
 
 
+def report_feedback(handled: list) -> int:
+    """Print each handled operator comment and its outcome; return the failure count."""
+    failures = 0
+    for i, h in enumerate(handled, start=1):
+        print(f"=== feedback [{i}/{len(handled)}] annotation {h.annotation_id} "
+              f"(run {h.run_id}) ===")
+        print(f"  Intent:  {h.intent}")
+        print(f"  Outcome: {h.outcome}")
+        if h.redo_run_id is not None:
+            print(f"  Re-ran:  run {h.redo_run_id}")
+            _print_steps(h.redo_run_id)
+        if h.lesson_case_id is not None:
+            print(f"  Lesson:  case {h.lesson_case_id}")
+        if h.escalation_id is not None:
+            print(f"  Escalated: escalation {h.escalation_id}")
+        if h.error:
+            failures += 1
+            print(f"  ERROR: {h.error}")
+        print()
+    return failures
+
+
 def main() -> int:
-    print("Polling inbox (one cycle)...")
+    print("Work-check (one cycle).")
     print(f"  topology: {poll_topology()}\n")
+
+    print("[1/2] Polling inbox...")
     processed = poll_inbox()
-
     if not processed:
-        print("No new messages to process (everything already seen or inbox empty).")
-        return 0
+        print("  No new messages (everything already seen or inbox empty).")
+        inbox_failures = 0
+    else:
+        inbox_failures = report_processed(processed)
+        print(f"  {len(processed) - inbox_failures} processed, {inbox_failures} failed.")
 
-    failures = report_processed(processed)
-    handled = len(processed) - failures
-    print(f"Done. {handled} processed, {failures} failed.")
+    print("\n[2/2] Sweeping un-actioned operator feedback...")
+    handled_fb = sweep_feedback()
+    if not handled_fb:
+        print("  No un-actioned operator feedback.")
+        fb_failures = 0
+    else:
+        fb_failures = report_feedback(handled_fb)
+        print(f"  {len(handled_fb) - fb_failures} handled, {fb_failures} failed.")
+
+    failures = inbox_failures + fb_failures
+    print(f"\nDone. {failures} failure(s).")
     return 0 if failures == 0 else 1
 
 

@@ -251,3 +251,33 @@ sink.
 - **No confident identity → no mismatch claim.** If you cannot confidently pin the
   person to an enrolment, do NOT assert their email is wrong or offer to change it —
   reply to ask who they are, or escalate. Never reconcile against a guessed identity.
+
+## Operator feedback closes the loop (re-execution)
+
+Operator feedback in the cockpit is not just training — it can re-drive a decision.
+The work-check surfaces, alongside new inbound mail, any UN-ACTIONED operator
+comment, and each comment is handled EXACTLY ONCE. A comment's intent is classified:
+
+- **INSTRUCTION** — act on this specific decision now.
+- **LESSON** — general guidance for the future; no redo.
+- **BOTH** — act now AND record a lasting lesson.
+- **UNCLEAR** — ambiguous; ask the operator what they meant (escalate).
+
+How each is handled:
+
+- **A rejection-with-explanation** (a comment on a still-pending proposal — a
+  queued email or an un-applied write) defaults to INSTRUCTION, and usually also a
+  LESSON. The original task is RE-RUN with the operator's feedback as binding
+  context, producing a corrected decision that goes **back through the same
+  approval gate** — a corrected commercial action re-queues for approval; nothing
+  irreversible auto-fires. The superseded item is marked rejected/superseded first,
+  so the original is never also sent or applied (no double action).
+- **A lesson / both** writes the operator's guidance to the case-book (unchanged
+  capture), so it is recalled as precedent on future tasks.
+- **An unclear comment** is escalated to the operator to clarify, rather than acted
+  on by guesswork.
+
+Re-runs are BOUNDED: a single line of feedback may trigger at most two redo
+attempts. If a corrected decision is still being rejected after that, the agent
+stops and escalates ("re-ran twice and still stuck — please handle directly")
+rather than looping. The approval gate itself is unchanged by any of this.
