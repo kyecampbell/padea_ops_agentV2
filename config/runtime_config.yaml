@@ -9,8 +9,11 @@
 # incident before it must escalate or stop (cost / runaway guard).
 per_incident_call_cap: 8
 
-# Inbound email polling interval, in seconds.
-poll_interval_seconds: 300
+# Inbound email polling interval, in seconds. This same cycle drives BOTH the
+# inbound poll and the operator-feedback sweep (the reject->redo loop), so it
+# bounds demo responsiveness. Lowered to 20 for the live demo; raise back to 300
+# afterwards for cost.
+poll_interval_seconds: 20
 
 # --- Worker schedule (the 24/7 background worker; see worker.py) -------------
 # The two weekly incidents fire on cron triggers in this timezone. Brisbane has

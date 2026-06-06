@@ -4,6 +4,16 @@ An AI agent that runs end-to-end catering operations for a tutoring company —
 6 schools, one caterer per school, students with dietary needs and meal
 preferences. It replaces the human who does this job.
 
+## Live deployment
+
+- **Main site:** https://padeacatering.com
+- **Operator cockpit:** https://padea-cockpit.onrender.com (the decision feed —
+  approve / reject / comment; login required)
+
+Email runs in **demo mode** in production: outbound mail is redirected to a demo
+sink (`[DEMO — Intended for: <real recipient>]`), so nothing reaches real
+recipients.
+
 ## Architecture
 
 - **One orchestrator agent** (Claude, model `claude-sonnet-4-6`) woken by three
