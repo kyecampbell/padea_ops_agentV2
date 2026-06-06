@@ -39,7 +39,7 @@ import anthropic
 from config.settings import settings
 from src.agent.loop import run_incident
 from src.db.connection import fetch_all, get_conn
-from src.tools.casebook import store_case
+from src.tools.casebook import recall_cases, store_case, update_case
 from src.tools.escalate import escalate_to_human
 
 logger = logging.getLogger(__name__)
@@ -49,6 +49,15 @@ _CLASSIFIER_MODEL = "claude-haiku-4-5-20251001"
 _CLASSIFIER_MAX_TOKENS = 256
 
 _INTENTS = ("INSTRUCTION", "LESSON", "BOTH", "UNCLEAR")
+
+# The cheap model also DECOMPOSES a lesson comment into its distinct atomic
+# lessons and decides, per lesson, whether it restates/extends an existing one
+# (merge) or is genuinely new (create) — bookkeeping, not the decision.
+_LESSON_MODEL = "claude-haiku-4-5-20251001"
+_LESSON_MAX_TOKENS = 1024
+# How many existing operator-feedback lessons to surface as merge candidates.
+# Bounded so the decompose prompt stays small; recall ranks them by relevance.
+_DEDUPE_CANDIDATES = 8
 
 # How many redo attempts a single line of feedback may spawn before we stop and
 # escalate "tried twice, stuck" instead of looping. The original run is depth 0;
@@ -172,6 +181,159 @@ def classify_intent(comment: str, situation: str, was_rejection: bool) -> str:
     return fallback
 
 
+# --- Lesson decomposition + dedupe/merge (cheap model) ------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class LessonOp:
+    """One atomic lesson the planner extracted from a comment, with its dedupe
+    verdict. ``merge_into`` is an existing case id to UPDATE/merge into, or None to
+    create a new case. ``lesson`` is the (consolidated, when merging) guidance."""
+
+    lesson: str
+    situation: str | None
+    tags: tuple[str, ...]
+    merge_into: int | None
+
+
+def _lesson_candidates(comment: str) -> list[dict]:
+    """Existing operator-feedback lessons most relevant to this comment — the pool
+    the planner may merge into. Keyword-ranked and bounded; empty on a miss/error
+    (so dedupe simply degrades to always-create rather than breaking the sweep)."""
+    res = recall_cases(query=comment, tags=["operator-feedback"], limit=_DEDUPE_CANDIDATES)
+    if not res.ok:
+        return []
+    return [
+        {"id": c["id"], "situation": c.get("situation"), "decision": c.get("decision")}
+        for c in res.data
+    ]
+
+
+def plan_lessons(comment: str, situation: str, candidates: list[dict]) -> list[LessonOp]:
+    """Decompose one operator comment into its DISTINCT atomic lessons, and decide
+    per lesson whether it restates/extends an existing one (merge) or is new (create).
+
+    Uses the cheap model with a forced tool call. The model is asked to split a
+    genuinely multi-point comment into separate lessons (e.g. "check the DB before
+    trusting a parent's claim" AND "reply to the real sender" = two), WITHOUT
+    fragmenting one coherent thought into near-duplicates and WITHOUT over-splitting.
+    For each lesson it sets ``merge_into_case_id`` to a candidate id when the lesson
+    restates/extends it (supplying the CONSOLIDATED wording), else null to create.
+
+    On any failure / empty result we fall back to ONE create op carrying the whole
+    comment — the prior single-lesson behaviour, so capture is never lost.
+    """
+    if not (comment or "").strip():
+        return []
+    fallback = [LessonOp(lesson=comment.strip(), situation=situation, tags=(), merge_into=None)]
+    cand_ids = {int(c["id"]) for c in candidates}
+
+    tool = {
+        "name": "record_lessons",
+        "description": "Record the distinct atomic lessons contained in this operator comment.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "lessons": {
+                    "type": "array",
+                    "description": (
+                        "One entry per DISTINCT atomic lesson. Usually exactly 1 — "
+                        "only emit more when the comment genuinely carries separate, "
+                        "independent lessons. Never fragment one coherent thought."
+                    ),
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "lesson": {
+                                "type": "string",
+                                "description": (
+                                    "The atomic, self-contained guidance/postulate. "
+                                    "When merging, give the CONSOLIDATED wording that "
+                                    "should REPLACE the existing lesson."
+                                ),
+                            },
+                            "situation": {
+                                "type": "string",
+                                "description": "Short 'when this applies' context for the lesson.",
+                            },
+                            "tags": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "A few keyword tags to aid future recall.",
+                            },
+                            "merge_into_case_id": {
+                                "type": ["integer", "null"],
+                                "description": (
+                                    "The id of an existing candidate lesson this "
+                                    "restates or extends (merge into it), or null to "
+                                    "create a genuinely new lesson."
+                                ),
+                            },
+                        },
+                        "required": ["lesson"],
+                    },
+                }
+            },
+            "required": ["lessons"],
+        },
+    }
+    if candidates:
+        cand_text = "\n".join(
+            f"- #{c['id']}: {(c.get('decision') or c.get('situation') or '').strip()[:200]}"
+            for c in candidates
+        )
+        cand_note = (
+            "EXISTING lessons (merge into one of these by id if a lesson restates or "
+            f"extends it; otherwise create new):\n{cand_text}\n\n"
+        )
+    else:
+        cand_note = "There are no existing lessons yet — every lesson is new.\n\n"
+    user = (
+        "Decompose the operator's comment into its DISTINCT atomic lessons for the "
+        "agent's case-book. Split only genuinely separate lessons; do NOT fragment a "
+        "single coherent thought, and do NOT over-split. For each lesson, decide "
+        "whether it restates/extends an existing lesson (merge) or is new (create).\n\n"
+        f"{cand_note}"
+        f"What the agent was doing:\n{situation}\n\n"
+        f"Operator comment:\n{comment}"
+    )
+    try:
+        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+        response = client.messages.create(
+            model=_LESSON_MODEL,
+            max_tokens=_LESSON_MAX_TOKENS,
+            tools=[tool],
+            tool_choice={"type": "tool", "name": "record_lessons"},
+            messages=[{"role": "user", "content": user}],
+        )
+        for block in response.content:
+            if block.type == "tool_use" and block.name == "record_lessons":
+                ops: list[LessonOp] = []
+                for item in block.input.get("lessons") or []:
+                    text = str(item.get("lesson") or "").strip()
+                    if not text:
+                        continue
+                    raw_merge = item.get("merge_into_case_id")
+                    # Only honour a merge into a candidate we actually surfaced —
+                    # a hallucinated / stale id falls back to create.
+                    merge_into = (
+                        int(raw_merge)
+                        if isinstance(raw_merge, int) and int(raw_merge) in cand_ids
+                        else None
+                    )
+                    tags = tuple(
+                        str(t).strip() for t in (item.get("tags") or []) if str(t).strip()
+                    )
+                    sit = str(item.get("situation") or "").strip() or None
+                    ops.append(
+                        LessonOp(lesson=text, situation=sit, tags=tags, merge_into=merge_into)
+                    )
+                return ops or fallback
+    except Exception as exc:  # decomposition is bookkeeping; never break the sweep.
+        logger.warning("feedback lesson planning failed: %s", exc)
+    return fallback
+
+
 # --- DB reads / claim / writes ------------------------------------------------
 
 
@@ -184,7 +346,12 @@ class ProcessedFeedback:
     intent: str | None
     outcome: str
     redo_run_id: int | None = None
+    # The primary lesson (first) for back-compat; ``lesson_case_ids`` carries every
+    # case touched (one comment may yield several atomic lessons), and
+    # ``lesson_actions`` records whether each was created or merged.
     lesson_case_id: int | None = None
+    lesson_case_ids: tuple[int, ...] = ()
+    lesson_actions: tuple[str, ...] = ()
     escalation_id: int | None = None
     error: str | None = None
 
@@ -201,7 +368,8 @@ def _unactioned() -> list[dict]:
                r.task        AS run_task,
                r.trigger_reason,
                r.notes       AS run_notes,
-               COALESCE(r.feedback_depth, 0) AS feedback_depth
+               COALESCE(r.feedback_depth, 0) AS feedback_depth,
+               r.inbound_from_address
         FROM decision_annotations a
         LEFT JOIN agent_runs r ON r.id = a.run_id
         WHERE a.handled_at IS NULL
@@ -211,6 +379,7 @@ def _unactioned() -> list[dict]:
     cols = (
         "id", "comment", "author", "run_id", "step_id",
         "run_task", "trigger_reason", "run_notes", "feedback_depth",
+        "inbound_from_address",
     )
     return [dict(zip(cols, row)) for row in rows]
 
@@ -379,21 +548,65 @@ def _build_rerun_task(ann: dict) -> str:
     )
 
 
-def _store_lesson(ann: dict, situation: str) -> int | None:
-    """Capture the operator's guidance as a retrievable case (lesson) — unchanged
-    case-book capture. Returns the new case id, or None on failure."""
-    tags = ["operator-feedback"]
+def _apply_lessons(
+    ann: dict,
+    situation: str,
+    plan: Callable[[str, str, list[dict]], list[LessonOp]] = plan_lessons,
+) -> list[dict]:
+    """Capture the operator's guidance as one OR MORE retrievable lessons.
+
+    Decomposes the comment into its distinct atomic lessons (``plan``), then for
+    each: MERGES into an existing lesson when the planner flagged one (so a
+    restated/extended lesson updates in place — no duplicate), else stores a new
+    case. Consolidate, don't fragment. Returns one record per applied lesson:
+    ``{case_id, action ('created'|'merged'), lesson}``. ``plan`` is injectable so
+    proofs can drive it deterministically.
+    """
+    comment = str(ann.get("comment") or "")
+    candidates = _lesson_candidates(comment)
+    cand_ids = {int(c["id"]) for c in candidates}
+
+    try:
+        ops = plan(comment, situation, candidates)
+    except Exception:  # planning is bookkeeping; fall back to one whole-comment lesson.
+        logger.exception("lesson planning raised; falling back to single lesson")
+        ops = [LessonOp(lesson=comment.strip(), situation=situation, tags=(), merge_into=None)]
+
+    base_tags = ["operator-feedback"]
     if ann.get("trigger_reason"):
-        tags.append(str(ann["trigger_reason"]))
-    result = store_case(
-        situation=situation,
-        decision=str(ann.get("comment") or ""),
-        rationale="Operator feedback captured via the decision UI (feedback sweep).",
-        tags=tags,
-        related_run_id=ann.get("run_id"),
-        created_by=ann.get("author"),
-    )
-    return result.data["case_id"] if result.ok else None
+        base_tags.append(str(ann["trigger_reason"]))
+
+    applied: list[dict] = []
+    for op in ops:
+        tags = base_tags + [t for t in op.tags if t and t not in base_tags]
+        sit = op.situation or situation
+        if op.merge_into in cand_ids:
+            merged = update_case(
+                op.merge_into,
+                situation=sit,
+                decision=op.lesson,
+                rationale="Operator feedback merged into an existing lesson (feedback sweep).",
+                tags=tags,
+            )
+            if merged.ok:
+                applied.append(
+                    {"case_id": op.merge_into, "action": "merged", "lesson": op.lesson}
+                )
+                continue
+            # The target vanished (e.g. deleted between recall and write) — create.
+        stored = store_case(
+            situation=sit,
+            decision=op.lesson,
+            rationale="Operator feedback captured via the decision UI (feedback sweep).",
+            tags=tags,
+            related_run_id=ann.get("run_id"),
+            created_by=ann.get("author"),
+        )
+        if stored.ok:
+            applied.append(
+                {"case_id": stored.data["case_id"], "action": "created", "lesson": op.lesson}
+            )
+    return applied
 
 
 # --- The sweep ----------------------------------------------------------------
@@ -404,12 +617,14 @@ def process_feedback(
     *,
     classify: Callable[[str, str, bool], str] = classify_intent,
     runner: _Runner = run_incident,
+    plan: Callable[[str, str, list[dict]], list[LessonOp]] = plan_lessons,
 ) -> ProcessedFeedback | None:
     """Handle one un-actioned comment, exactly once.
 
     Claims the row; if the claim is lost (already handled), returns None. Otherwise
     classifies intent, routes it, performs the action(s), and records the outcome.
-    ``classify`` / ``runner`` are injectable so proofs can drive deterministic paths.
+    ``classify`` / ``runner`` / ``plan`` are injectable so proofs can drive
+    deterministic paths.
     """
     annotation_id = int(ann["id"])
     if not _claim(annotation_id):
@@ -426,7 +641,7 @@ def process_feedback(
     route = decide_route(intent, depth, was_rejection)
 
     redo_run_id: int | None = None
-    lesson_case_id: int | None = None
+    lessons: list[dict] = []
     escalation_id: int | None = None
     redo_attempts = 0
     outcome = "noop"
@@ -448,9 +663,18 @@ def process_feedback(
             if step_id is not None:
                 _supersede_write_step(step_id)  # no double-apply of a rejected write.
             redo_attempts = depth + 1
+            # Carry the ORIGINAL run's inbound sender forward, so a re-run of an
+            # inbound incident replies to the REAL sender automatically (without
+            # it, reply_to_sender has no address and the agent falls back to
+            # send_email -> the demo sink). NULL for non-inbound runs (no change).
+            rerun_context: dict[str, Any] | None = None
+            inbound_from = ann.get("inbound_from_address")
+            if inbound_from:
+                rerun_context = {"inbound_from_address": inbound_from}
             result = runner(
                 trigger_reason="feedback_rerun",
                 task=_build_rerun_task(ann),
+                extra_context=rerun_context,
                 parent_run_id=int(ann["run_id"]),
                 feedback_depth=redo_attempts,
             )
@@ -480,10 +704,11 @@ def process_feedback(
             escalation_id = esc.data.get("escalation_id") if esc.ok else None
             outcome = "escalated_unclear"
 
-        # LESSON / BOTH: capture the guidance (unchanged case-book write). For a
-        # lesson-only comment this is the whole outcome.
+        # LESSON / BOTH: decompose into distinct atomic lessons, merging restatements
+        # into existing lessons (no duplicates) and creating only what's genuinely
+        # new. For a lesson-only comment this is the whole outcome.
         if route.lesson:
-            lesson_case_id = _store_lesson(ann, situation)
+            lessons = _apply_lessons(ann, situation, plan)
             if outcome == "noop":
                 outcome = "lesson_only"
     except Exception as exc:  # one bad comment must not sink the sweep.
@@ -495,14 +720,18 @@ def process_feedback(
             outcome=outcome, redo_run_id=redo_run_id, error=str(exc),
         )
 
+    lesson_case_ids = tuple(int(l["case_id"]) for l in lessons)
+    lesson_actions = tuple(str(l["action"]) for l in lessons)
     _finalize(annotation_id, intent, outcome, redo_run_id, redo_attempts)
     logger.info(
-        "feedback handled annotation=%s intent=%s outcome=%s redo_run=%s",
-        annotation_id, intent, outcome, redo_run_id,
+        "feedback handled annotation=%s intent=%s outcome=%s redo_run=%s lessons=%s",
+        annotation_id, intent, outcome, redo_run_id, list(zip(lesson_case_ids, lesson_actions)),
     )
     return ProcessedFeedback(
         annotation_id=annotation_id, run_id=run_id, intent=intent, outcome=outcome,
-        redo_run_id=redo_run_id, lesson_case_id=lesson_case_id,
+        redo_run_id=redo_run_id,
+        lesson_case_id=(lesson_case_ids[0] if lesson_case_ids else None),
+        lesson_case_ids=lesson_case_ids, lesson_actions=lesson_actions,
         escalation_id=escalation_id,
     )
 
@@ -511,6 +740,7 @@ def sweep_feedback(
     *,
     classify: Callable[[str, str, bool], str] = classify_intent,
     runner: _Runner = run_incident,
+    plan: Callable[[str, str, list[dict]], list[LessonOp]] = plan_lessons,
 ) -> list[ProcessedFeedback]:
     """Run one feedback sweep: handle every un-actioned operator comment once.
 
@@ -518,7 +748,7 @@ def sweep_feedback(
     was handled (skipped/already-claimed comments are omitted)."""
     handled: list[ProcessedFeedback] = []
     for ann in _unactioned():
-        result = process_feedback(ann, classify=classify, runner=runner)
+        result = process_feedback(ann, classify=classify, runner=runner, plan=plan)
         if result is not None:
             handled.append(result)
     return handled

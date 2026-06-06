@@ -29,12 +29,19 @@ Reference/lookup tables (the enum replacements) are seeded by the schema DDL and
 are left alone.
 
 Usage:
-  uv run python scripts/reset_demo.py --capture   # snapshot current DB -> seed.sql
-  uv run python scripts/reset_demo.py --yes        # reset to the captured seed
+  uv run python scripts/reset_demo.py --capture        # snapshot current DB -> seed.sql
+  uv run python scripts/reset_demo.py --yes             # reset to the captured seed (lessons kept)
+  uv run python scripts/reset_demo.py --clear-lessons --yes  # deliberate WIPE: clean slate
 
 ``--capture`` writes database/seed/seed.sql from the CURRENT seed-table contents
 (run it once against a clean DB to mint the golden seed). The default action is a
 reset; it is destructive, so it requires ``--yes`` (or an interactive y/N).
+
+``--clear-lessons`` is the DELIBERATE wipe: on top of the normal reset it zeros the
+case-book (cases + decision_annotations) AND the operator policies AND the seeded
+agent decision-feed (runs / steps / outbound emails / weekly summaries / citations /
+escalations) — a true clean slate with only the business baseline. The default reset
+still PRESERVES the case-book; this flag is the opt-in destruction.
 """
 
 from __future__ import annotations
@@ -119,6 +126,29 @@ PRESERVE_NULL_FKS: dict[str, tuple[str, ...]] = {
     "cases": ("related_run_id", "related_caterer_id", "related_enrolment_id"),
     "decision_annotations": ("step_id", "run_id", "redo_run_id"),
 }
+
+# The DELIBERATE wipe (`--clear-lessons`): on top of the normal reset, zero the
+# operator's training AND the seeded agent decision-feed, leaving only the business
+# baseline — for a true clean-slate demo. This empties the case-book (cases +
+# decision_annotations, which the default reset PRESERVES) and the operator policies,
+# PLUS the seeded agent artifacts (runs / steps / outbound emails / weekly caterer
+# summaries / lesson + policy citations / escalations). The set is CLOSED under FK
+# references — every table that references one of these is itself in the set — so a
+# single TRUNCATE is FK-safe without CASCADE (no business table points in). Business
+# inputs (caterers, schools, menus, enrolments, dietary, prefs, orders, feedback, …)
+# are untouched.
+CLEAR_LESSONS_TABLES: tuple[str, ...] = (
+    "step_lesson_citations",
+    "step_policy_citations",
+    "caterer_week_orders",
+    "outbound_emails",
+    "agent_steps",
+    "escalations",
+    "decision_annotations",
+    "cases",
+    "policies",
+    "agent_runs",
+)
 
 _BATCH = 100  # rows per multi-row INSERT in the captured seed file.
 
@@ -255,8 +285,14 @@ def _restore_preserved(cur: psycopg.Cursor, snapshot: dict[str, tuple[list[str],
         )
 
 
-def restore() -> int:
-    """Truncate everything and replay seed.sql, re-inserting preserved lessons."""
+def restore(clear_lessons: bool = False) -> int:
+    """Truncate everything and replay seed.sql, re-inserting preserved lessons.
+
+    With ``clear_lessons`` (the deliberate ``--clear-lessons`` wipe) the preserved
+    case-book is NOT snapshotted/restored, and after the seed replay the agent
+    decision-feed + policies are additionally truncated to empty — a true clean
+    slate (business baseline only). The default reset preserves the case-book.
+    """
     if not SEED_PATH.exists():
         print(
             f"No seed file at {SEED_PATH}. Run `--capture` against a clean DB first.",
@@ -269,8 +305,9 @@ def restore() -> int:
     targets = list(EPHEMERAL_TABLES) + list(SEED_TABLES) + list(PRESERVE_TABLES)
     try:
         with get_conn() as conn, conn.cursor() as cur:
-            # 1. Snapshot the lessons (text kept, volatile FK links nulled).
-            snapshot = _snapshot_preserved(cur)
+            # 1. Snapshot the lessons (text kept, volatile FK links nulled). Skipped
+            #    on a deliberate wipe — the case-book is being cleared, not kept.
+            snapshot = {} if clear_lessons else _snapshot_preserved(cur)
 
             # 2. Wipe everything in one statement (FK-safe: all tables included).
             cur.execute(
@@ -282,21 +319,30 @@ def restore() -> int:
             # 3. Reload the clean seed; ephemeral tables stay empty.
             cur.execute(seed_sql)
 
-            # 4. Put the preserved lessons back.
+            # 4. Put the preserved lessons back (no-op on a deliberate wipe).
             _restore_preserved(cur, snapshot)
 
-            # 5. Realign sequences so new inserts don't collide with seeded ids.
+            # 5. Deliberate wipe: also zero the case-book + policies + the seeded
+            #    agent decision-feed, leaving only the business baseline.
+            if clear_lessons:
+                cur.execute(
+                    sql.SQL("TRUNCATE {} RESTART IDENTITY").format(
+                        sql.SQL(", ").join(sql.Identifier(t) for t in CLEAR_LESSONS_TABLES)
+                    )
+                )
+
+            # 6. Realign sequences so new inserts don't collide with seeded ids.
             _fix_sequences(cur)
             conn.commit()
     except psycopg.Error as exc:
         print(f"Reset failed: {exc}", file=sys.stderr)
         return 1
 
-    _report()
+    _report(clear_lessons)
     return 0
 
 
-def _report() -> None:
+def _report(clear_lessons: bool = False) -> None:
     """Print a short before/after-style confirmation of the reset state."""
     checks = [
         ("enrolments", "SELECT count(*) FROM enrolments"),
@@ -314,7 +360,12 @@ def _report() -> None:
         ("decision_annotations (preserved)", "SELECT count(*) FROM decision_annotations"),
         ("policies (preserved)", "SELECT count(*) FROM policies"),
     ]
-    print("Demo reset complete. Seed reloaded (orders restored); training lessons preserved.\n")
+    if clear_lessons:
+        print("Demo reset complete — DELIBERATE WIPE (--clear-lessons): clean slate. "
+              "Business baseline only; case-book, policies, and the seeded agent "
+              "decision-feed (runs/steps/emails/summaries) all zeroed.\n")
+    else:
+        print("Demo reset complete. Seed reloaded (orders restored); training lessons preserved.\n")
     with get_conn() as conn, conn.cursor() as cur:
         width = max(len(label) for label, _ in checks)
         for label, q in checks:
@@ -332,6 +383,12 @@ def main(argv: list[str] | None = None) -> int:
         help="Snapshot the current seed tables into database/seed/seed.sql and exit.",
     )
     parser.add_argument(
+        "--clear-lessons", action="store_true",
+        help="DELIBERATE WIPE: also zero the case-book (cases + decision_annotations), "
+             "policies, and the seeded agent decision-feed — a clean slate (business "
+             "baseline only). The default reset PRESERVES the case-book.",
+    )
+    parser.add_argument(
         "--yes", action="store_true",
         help="Skip the confirmation prompt (required when stdin is not a TTY).",
     )
@@ -344,12 +401,14 @@ def main(argv: list[str] | None = None) -> int:
         if not sys.stdin.isatty():
             print("Refusing to reset without --yes (stdin is not a TTY).", file=sys.stderr)
             return 1
-        reply = input("This truncates operational data (cases + annotations kept). Proceed? [y/N] ")
+        kept = ("CLEARS the case-book + policies + agent decision-feed (clean slate)"
+                if args.clear_lessons else "cases + annotations kept")
+        reply = input(f"This truncates operational data ({kept}). Proceed? [y/N] ")
         if reply.strip().lower() not in ("y", "yes"):
             print("Aborted.")
             return 1
 
-    return restore()
+    return restore(clear_lessons=args.clear_lessons)
 
 
 if __name__ == "__main__":

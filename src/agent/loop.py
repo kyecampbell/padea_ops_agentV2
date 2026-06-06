@@ -159,17 +159,22 @@ def _open_run(
     task: str | None = None,
     parent_run_id: int | None = None,
     feedback_depth: int = 0,
+    inbound_from_address: str | None = None,
 ) -> int:
     """Insert an `agent_runs` row and return its id.
 
     ``task`` is persisted so a feedback-driven re-run can faithfully replay the
     original prompt; ``parent_run_id`` / ``feedback_depth`` record the re-run
-    lineage and bound the redo chain (see ``src.agent.feedback``)."""
+    lineage and bound the redo chain (see ``src.agent.feedback``).
+    ``inbound_from_address`` is persisted (NULL for non-inbound runs) so a feedback
+    re-run can carry the ORIGINAL sender forward and reply_to_sender routes to the
+    real sender automatically (see migration 014 / ``src.agent.feedback``)."""
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute(
-            "INSERT INTO agent_runs (trigger_reason, task, parent_run_id, feedback_depth) "
-            "VALUES (%s, %s, %s, %s) RETURNING id",
-            (trigger_reason, task, parent_run_id, feedback_depth),
+            "INSERT INTO agent_runs "
+            "(trigger_reason, task, parent_run_id, feedback_depth, inbound_from_address) "
+            "VALUES (%s, %s, %s, %s, %s) RETURNING id",
+            (trigger_reason, task, parent_run_id, feedback_depth, inbound_from_address),
         )
         run_id = cur.fetchone()[0]
         conn.commit()
@@ -389,7 +394,12 @@ def run_incident(
     ``parent_run_id`` / ``feedback_depth`` mark a feedback-driven re-run: the run it
     corrects and its depth in the bounded redo chain (see ``src.agent.feedback``).
     """
-    run_id = _open_run(trigger_reason, task, parent_run_id, feedback_depth)
+    # Persist the inbound sender on the run (NULL for non-inbound runs) so a
+    # feedback re-run can carry it forward and reply to the real sender.
+    inbound_from_address = (extra_context or {}).get("inbound_from_address")
+    run_id = _open_run(
+        trigger_reason, task, parent_run_id, feedback_depth, inbound_from_address
+    )
     run_context: dict[str, Any] = {"run_id": run_id, **(extra_context or {})}
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
     schemas = tool_schemas()

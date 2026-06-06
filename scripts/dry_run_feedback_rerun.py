@@ -88,6 +88,13 @@ def _classify_stub(comment: str, situation: str, was_rejection: bool) -> str:
     return "UNCLEAR"                  # (c)
 
 
+def _plan_stub(comment: str, situation: str, candidates: list) -> list:
+    """Deterministic stand-in for the lesson decomposer: one create op carrying the
+    whole comment (no LLM). The decompose/dedupe/merge judgment itself is proved in
+    scripts/dry_run_lesson_consolidation.py; here we only need a lesson stored."""
+    return [feedback.LessonOp(lesson=comment.strip(), situation=situation, tags=(), merge_into=None)]
+
+
 def _runner_stub(
     trigger_reason: str, task: str, call_cap: int | None = None,
     extra_context: dict[str, Any] | None = None,
@@ -177,11 +184,11 @@ def main() -> int:
         print(f"\nWork-check sees {unactioned_before} un-actioned comment(s). Sweeping...\n")
 
         # --- One sweep handles all four, exactly once ------------------------
-        handled = feedback.sweep_feedback(classify=_classify_stub, runner=_runner_stub)
+        handled = feedback.sweep_feedback(classify=_classify_stub, runner=_runner_stub, plan=_plan_stub)
         results = {h.annotation_id: h for h in handled}
 
         # --- Idempotency: a second sweep finds nothing to do -----------------
-        second = feedback.sweep_feedback(classify=_classify_stub, runner=_runner_stub)
+        second = feedback.sweep_feedback(classify=_classify_stub, runner=_runner_stub, plan=_plan_stub)
 
         # --- Gather state for assertions -------------------------------------
         ra, rb, rc, rd = results[ann_a], results[ann_b], results[ann_c], results[ann_d]
@@ -246,7 +253,7 @@ def main() -> int:
         rerun_ids = [r[0] for r in fetch_all(
             "SELECT id FROM agent_runs WHERE parent_run_id = ANY(%s)", (created_runs,))]
         all_runs = list({*created_runs, *rerun_ids})
-        lesson_ids = [h.lesson_case_id for h in results.values() if h.lesson_case_id]
+        lesson_ids = [cid for h in results.values() for cid in h.lesson_case_ids]
         with get_conn() as conn, conn.cursor() as cur:
             cur.execute("DELETE FROM outbound_emails WHERE related_run_id = ANY(%s)", (all_runs,))
             cur.execute("DELETE FROM escalations WHERE run_id = ANY(%s)", (all_runs,))
